@@ -201,7 +201,13 @@ class MockProvider:
             "ready": True,
         }
 
-    def extract_jobs(self, source_text: str) -> dict[str, object]:
+    def extract_jobs(
+        self,
+        source_text: str,
+        source_type: str | None = None,
+        source_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, object]:
         blocks = _split_job_blocks(source_text)
         jobs = [_extract_job(block, index + 1) for index, block in enumerate(blocks)]
         source_kind = "multi_job_digest" if len(jobs) > 1 else "single_job"

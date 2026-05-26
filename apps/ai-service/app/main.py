@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.config import get_provider_config
 from app.providers import get_provider
+from app.providers.base import ProviderError
 
 app = FastAPI(title="Job Command Center AI Service", version="0.1.0")
 
@@ -84,7 +85,21 @@ def extract_jobs(request: ExtractJobsRequest) -> dict[str, object]:
     config = get_provider_config()
     provider = get_provider(config)
 
-    return provider.extract_jobs(source_text)
+    try:
+        return provider.extract_jobs(
+            source_text=source_text,
+            source_type=request.sourceType,
+            source_name=request.sourceName,
+            metadata=request.metadata,
+        )
+    except ProviderError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={
+                "message": error.message,
+                "provider": provider.health(),
+            },
+        ) from error
 
 
 @app.post("/review-job", response_model=ReviewJobResponse)
@@ -92,8 +107,17 @@ def review_job(request: ReviewJobRequest) -> dict[str, object]:
     config = get_provider_config()
     provider = get_provider(config)
 
-    return provider.review_job(
-        candidate_profile=request.candidateProfile,
-        job=request.job,
-        description=request.description,
-    )
+    try:
+        return provider.review_job(
+            candidate_profile=request.candidateProfile,
+            job=request.job,
+            description=request.description,
+        )
+    except ProviderError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={
+                "message": error.message,
+                "provider": provider.health(),
+            },
+        ) from error

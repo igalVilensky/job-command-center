@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { callReviewJob, MOCK_AI_MODEL, MOCK_AI_PROVIDER, REVIEW_PROMPT_VERSION } from "../lib/ai-client";
+import { callReviewJob, getAiProviderMetadata, REVIEW_PROMPT_VERSION } from "../lib/ai-client";
 import { validateReviewResponse } from "../lib/ai-validation";
 import { HttpError } from "../lib/http-error";
 import {
@@ -195,6 +195,7 @@ jobsRouter.post(
   asyncHandler(async (req, res) => {
     const userId = getUserId(req as AuthenticatedRequest);
     const existingJob = await findOwnedJob(req.params.id, userId);
+    const providerMetadata = getAiProviderMetadata();
     const profile = await prisma.candidateProfile.upsert({
       where: { userId },
       update: {},
@@ -214,8 +215,8 @@ jobsRouter.post(
         userId,
         jobId: existingJob.id,
         runType: "review_job",
-        provider: MOCK_AI_PROVIDER,
-        model: MOCK_AI_MODEL,
+        provider: providerMetadata.provider,
+        model: providerMetadata.model,
         status: "running",
         inputChars: inputText.length,
         metadataJson: {
@@ -255,8 +256,8 @@ jobsRouter.post(
         const review = await tx.aiReview.create({
           data: {
             jobId: existingJob.id,
-            provider: MOCK_AI_PROVIDER,
-            model: MOCK_AI_MODEL,
+            provider: providerMetadata.provider,
+            model: providerMetadata.model,
             promptVersion: REVIEW_PROMPT_VERSION,
             score: reviewResponse.score,
             decision: reviewResponse.decision,

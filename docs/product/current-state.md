@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 05 mock AI extraction and review phase.
+This project is currently in the Milestone 06 Groq provider phase.
 
 ## Existing prototype
 
@@ -38,6 +38,7 @@ Milestone 01 project skeleton has been created.
 - Docker Compose Postgres exists with local `jobcc` credentials.
 - `.env.example` exists with safe placeholders.
 - Mock AI extraction and review are implemented without external provider calls.
+- Optional Groq extraction and review are available when `AI_PROVIDER=groq`, `GROQ_API_KEY`, and `GROQ_MODEL` are configured locally.
 - Prisma is configured in `apps/api`.
 - Initial Prisma models exist for `User` and `CandidateProfile`.
 - Initial migration exists for the auth foundation.
@@ -72,15 +73,15 @@ Milestone 01 project skeleton has been created.
 - Authenticated AI orchestration routes exist:
   - `POST /ai/extract-jobs`
 - Manual job creation creates a manual source and optional description.
-- Paste extraction creates an automation run, source, jobs, and descriptions from mock AI output.
-- Mock job review creates an automation run, stores an AI review, and updates the job status to `analyzed`.
+- Paste extraction creates an automation run, source, jobs, and descriptions from AI service output.
+- Job review creates an automation run, stores an AI review, and updates the job status to `analyzed`.
 - Job list excludes archived jobs by default.
 - Job reads/writes are scoped to the authenticated user.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
-- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, and mock review action.
+- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, and AI review action.
 
 Not implemented yet:
 
 - application pipeline
-- real AI provider calls
+- Gemini/Ollama/OpenAI providers
 - Gmail/OAuth/integrations

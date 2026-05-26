@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { callExtractJobs, EXTRACT_PROMPT_VERSION, MOCK_AI_MODEL, MOCK_AI_PROVIDER } from "../lib/ai-client";
+import { callExtractJobs, EXTRACT_PROMPT_VERSION, getAiProviderMetadata } from "../lib/ai-client";
 import { validateExtractJobsBody, validateExtractionResponse } from "../lib/ai-validation";
 import { HttpError } from "../lib/http-error";
 import { serializeJob } from "../lib/job-validation";
@@ -49,12 +49,13 @@ aiRouter.post(
   asyncHandler(async (req, res) => {
     const userId = getUserId(req as AuthenticatedRequest);
     const input = validateExtractJobsBody(req.body);
+    const providerMetadata = getAiProviderMetadata();
     const run = await prisma.automationRun.create({
       data: {
         userId,
         runType: "extract_jobs",
-        provider: MOCK_AI_PROVIDER,
-        model: MOCK_AI_MODEL,
+        provider: providerMetadata.provider,
+        model: providerMetadata.model,
         status: "running",
         inputChars: input.sourceText.length,
         metadataJson: {

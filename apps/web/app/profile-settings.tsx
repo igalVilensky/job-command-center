@@ -820,7 +820,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         type="button"
                         onClick={() => void handleReviewJob(selectedJob.id)}
                       >
-                        Run mock AI review
+                        Run AI review
                       </button>
                     </div>
                     <dl className="detail-list">

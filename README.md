@@ -62,15 +62,15 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, and mock AI extraction/review foundation:
+The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, and an optional Groq provider adapter:
 
-- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, job inbox, and mock review views.
+- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, job inbox, and AI review views.
 - `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job routes, and authenticated AI orchestration routes.
-- `apps/ai-service`: FastAPI service on port 8000 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, and mock-only provider behavior.
+- `apps/ai-service`: FastAPI service on port 8000 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
 - `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `AiReview`, and `AutomationRun`.
 
-Application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Application pipeline, Gemini/Ollama/OpenAI providers, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -151,6 +151,17 @@ curl -i \
   http://127.0.0.1:8000/review-job
 ```
 
+Mock mode is the default and needs no AI key. To enable Groq locally, set placeholder values like these in your uncommitted `.env`, then restart the AI service:
+
+```bash
+AI_PROVIDER="groq"
+GROQ_API_KEY="replace_with_your_local_key"
+GROQ_MODEL="llama-3.3-70b-versatile"
+GROQ_API_URL="https://api.groq.com/openai/v1/chat/completions"
+```
+
+Never commit real API keys.
+
 Auth checks:
 
 ```bash
@@ -215,7 +226,7 @@ curl -i -b /tmp/jobcc-cookies.txt -X POST http://127.0.0.1:4000/jobs/JOB_ID/arch
 curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs
 ```
 
-Mock AI workflow checks:
+AI workflow checks:
 
 ```bash
 curl -i -c /tmp/jobcc-cookies.txt \
@@ -272,6 +283,9 @@ AI_SERVICE_URL="http://localhost:8000"
 AI_SERVICE_TOKEN=""
 
 AI_PROVIDER="mock"
+
+AI_EXTRACTION_MAX_SOURCE_CHARS="20000"
+AI_REVIEW_MAX_DESCRIPTION_CHARS="4500"
 
 GROQ_API_KEY=""
 GROQ_MODEL="llama-3.3-70b-versatile"
