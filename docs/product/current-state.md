@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in planning/docs-first phase.
+This project is currently in the Milestone 01 skeleton phase.
 
 ## Existing prototype
 
@@ -29,6 +29,20 @@ Prototype capabilities:
 
 ## Current repo status
 
-No code has been generated yet.
+Milestone 01 project skeleton has been created.
 
-The first implementation should create the project skeleton only.
+- pnpm workspace and Turbo root configuration exist.
+- `apps/web` Next.js placeholder exists and displays "Job Command Center".
+- `apps/api` Express placeholder exists with `GET /health`.
+- `apps/ai-service` FastAPI placeholder exists with `GET /health`.
+- Docker Compose Postgres exists with local `jobcc` credentials.
+- `.env.example` exists with safe placeholders.
+- Mock AI provider placeholder exists.
+
+Not implemented yet:
+
+- auth
+- Prisma/database models
+- product features
+- real AI provider calls
+- Gmail/OAuth/integrations

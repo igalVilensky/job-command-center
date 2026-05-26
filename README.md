@@ -60,6 +60,76 @@ docs/
   codex/        Codex project brief, implementation rules, first milestone
 ```
 
+## Milestone 01 skeleton
+
+The current repository state is the initial runnable skeleton:
+
+- `apps/web`: Next.js + TypeScript placeholder on port 3000.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`.
+- `apps/ai-service`: FastAPI service on port 8000 with `GET /health` and a mock provider placeholder.
+- `docker-compose.yml`: local PostgreSQL service.
+
+Auth, Prisma/database models, product workflows, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+
+## Local setup
+
+Install Node dependencies:
+
+```bash
+pnpm install
+```
+
+Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Start Postgres:
+
+```bash
+docker compose up -d postgres
+```
+
+These commands assume local ports `3000`, `4000`, `8000`, and `5432` are free.
+
+Run the web app:
+
+```bash
+pnpm dev:web
+```
+
+Run the API:
+
+```bash
+pnpm dev:api
+```
+
+Set up and run the AI service:
+
+```bash
+cd apps/ai-service
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+After the Python virtual environment is activated, the equivalent root command is:
+
+```bash
+pnpm dev:ai
+```
+
+Useful checks:
+
+```bash
+curl http://localhost:4000/health
+curl http://localhost:8000/health
+```
+
+The web app loads at `http://localhost:3000`.
+
 ## Runtime responsibility
 
 - `apps/web` never calls AI providers directly.
