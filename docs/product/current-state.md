@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 01 skeleton phase.
+This project is currently in the Milestone 02 database/auth foundation phase.
 
 ## Existing prototype
 
@@ -38,11 +38,22 @@ Milestone 01 project skeleton has been created.
 - Docker Compose Postgres exists with local `jobcc` credentials.
 - `.env.example` exists with safe placeholders.
 - Mock AI provider placeholder exists.
+- Prisma is configured in `apps/api`.
+- Initial Prisma models exist for `User` and `CandidateProfile`.
+- Initial migration exists for the auth foundation.
+- Seed script creates local demo user `demo@jobcc.local`.
+- Basic email/password auth routes exist:
+  - `POST /auth/register`
+  - `POST /auth/login`
+  - `POST /auth/logout`
+  - `GET /auth/me`
+- Passwords are hashed before storage.
+- Auth uses an HTTP-only cookie/JWT session.
 
 Not implemented yet:
 
-- auth
-- Prisma/database models
 - product features
+- job CRUD
+- candidate settings UI
 - real AI provider calls
 - Gmail/OAuth/integrations

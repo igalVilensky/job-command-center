@@ -60,16 +60,17 @@ docs/
   codex/        Codex project brief, implementation rules, first milestone
 ```
 
-## Milestone 01 skeleton
+## Current skeleton
 
-The current repository state is the initial runnable skeleton:
+The current repository state includes the initial runnable skeleton plus the database/auth foundation:
 
 - `apps/web`: Next.js + TypeScript placeholder on port 3000.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health` and basic email/password auth.
 - `apps/ai-service`: FastAPI service on port 8000 with `GET /health` and a mock provider placeholder.
 - `docker-compose.yml`: local PostgreSQL service.
+- `apps/api/prisma`: Prisma schema and initial migration for `User` and `CandidateProfile`.
 
-Auth, Prisma/database models, product workflows, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Product workflows, job CRUD, candidate settings UI, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -92,6 +93,14 @@ docker compose up -d postgres
 ```
 
 These commands assume local ports `3000`, `4000`, `8000`, and `5432` are free.
+
+Prepare the API database:
+
+```bash
+pnpm --filter @jobcc/api db:generate
+pnpm --filter @jobcc/api db:migrate
+pnpm --filter @jobcc/api db:seed
+```
 
 Run the web app:
 
@@ -128,6 +137,25 @@ curl http://localhost:4000/health
 curl http://localhost:8000/health
 ```
 
+Auth checks:
+
+```bash
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"person@example.com","password":"password123"}' \
+  http://127.0.0.1:4000/auth/register
+
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@jobcc.local","password":"password123"}' \
+  http://127.0.0.1:4000/auth/login
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/auth/me
+
+curl -i -b /tmp/jobcc-cookies.txt -c /tmp/jobcc-cookies.txt \
+  -X POST http://127.0.0.1:4000/auth/logout
+```
+
 The web app loads at `http://localhost:3000`.
 
 ## Runtime responsibility
@@ -154,6 +182,8 @@ API_URL="http://localhost:4000"
 NEXT_PUBLIC_API_URL="http://localhost:4000"
 
 JWT_SECRET="replace_me_with_a_long_random_secret"
+AUTH_COOKIE_NAME="jobcc_session"
+JWT_EXPIRES_IN="7d"
 
 AI_ENABLED="true"
 AI_SERVICE_URL="http://localhost:8000"
