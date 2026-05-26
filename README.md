@@ -62,15 +62,15 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, and a manual job inbox:
+The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, and mock AI extraction/review foundation:
 
-- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile and job inbox views.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile routes, and authenticated job routes.
-- `apps/ai-service`: FastAPI service on port 8000 with `GET /health` and a mock provider placeholder.
+- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, job inbox, and mock review views.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job routes, and authenticated AI orchestration routes.
+- `apps/ai-service`: FastAPI service on port 8000 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, and mock-only provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
-- `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, and `JobDescription`.
+- `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `AiReview`, and `AutomationRun`.
 
-Imports, AI review workflows, application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -137,6 +137,20 @@ curl http://localhost:4000/health
 curl http://localhost:8000/health
 ```
 
+AI service checks:
+
+```bash
+curl -i \
+  -H "Content-Type: application/json" \
+  -d '{"sourceText":"Company: Example GmbH\nTitle: Backend Engineer\nLocation: Berlin\nRemote: hybrid\nBuild APIs with TypeScript and Node.js.","sourceType":"paste","sourceName":"Local paste"}' \
+  http://127.0.0.1:8000/extract-jobs
+
+curl -i \
+  -H "Content-Type: application/json" \
+  -d '{"candidateProfile":{"targetRoles":["Backend Engineer"],"strongSkills":["TypeScript","Node.js"],"minimumSalaryEur":70000},"job":{"company":"Example GmbH","title":"Backend Engineer","location":"Berlin","remoteType":"hybrid","salaryText":"70000 EUR","sourceQuality":"full_description"},"description":{"fullText":"Build APIs with TypeScript and Node.js."}}' \
+  http://127.0.0.1:8000/review-job
+```
+
 Auth checks:
 
 ```bash
@@ -199,6 +213,29 @@ curl -i -b /tmp/jobcc-cookies.txt \
 
 curl -i -b /tmp/jobcc-cookies.txt -X POST http://127.0.0.1:4000/jobs/JOB_ID/archive
 curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs
+```
+
+Mock AI workflow checks:
+
+```bash
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@jobcc.local","password":"password123"}' \
+  http://127.0.0.1:4000/auth/login
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"sourceText":"Company: Example GmbH\nTitle: Backend Engineer\nLocation: Berlin\nRemote: hybrid\nBuild APIs with TypeScript and Node.js.","sourceType":"paste","sourceName":"Local paste"}' \
+  http://127.0.0.1:4000/ai/extract-jobs
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -X POST \
+  http://127.0.0.1:4000/jobs/JOB_ID/review
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs/JOB_ID
 ```
 
 The web app loads at `http://localhost:3000`.

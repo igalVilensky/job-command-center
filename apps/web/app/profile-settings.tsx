@@ -28,6 +28,17 @@ type JobDescription = {
   language: string | null;
 };
 
+type AiReview = {
+  id: string;
+  score: number;
+  decision: string;
+  reviewText: string;
+  riskFlags: string[];
+  cvAngle: string;
+  clarificationQuestions: string[];
+  createdAt: string;
+};
+
 type Job = {
   id: string;
   company: string;
@@ -44,6 +55,7 @@ type Job = {
   updatedAt: string;
   archivedAt: string | null;
   description: JobDescription | null;
+  latestAiReview: AiReview | null;
 };
 
 type ProfileFormState = {
@@ -68,7 +80,13 @@ type JobFormState = {
   fullDescription: string;
 };
 
-type ActiveView = "profile" | "jobs";
+type ImportFormState = {
+  sourceText: string;
+  sourceType: string;
+  sourceName: string;
+};
+
+type ActiveView = "profile" | "import" | "jobs";
 
 const emptyProfileForm: ProfileFormState = {
   targetRoles: "",
@@ -90,6 +108,12 @@ const emptyJobForm: JobFormState = {
   salaryText: "",
   url: "",
   fullDescription: ""
+};
+
+const emptyImportForm: ImportFormState = {
+  sourceText: "",
+  sourceType: "paste",
+  sourceName: ""
 };
 
 const remoteTypeOptions = [
@@ -144,6 +168,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   });
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
   const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
+  const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
+  const [extractedJobs, setExtractedJobs] = useState<Job[]>([]);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -177,6 +204,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const loadJobs = async () => {
     const data = await request<{ jobs: Job[] }>("/jobs");
     setJobs(data.jobs);
+    return data.jobs;
   };
 
   const loadJob = async (id: string) => {
@@ -293,6 +321,57 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleExtractJobs = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+    setImportWarnings([]);
+
+    try {
+      const data = await request<{ jobs: Job[]; warnings: string[] }>("/ai/extract-jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          sourceText: importForm.sourceText,
+          sourceType: importForm.sourceType || "paste",
+          sourceName: importForm.sourceName || null
+        })
+      });
+
+      setExtractedJobs(data.jobs);
+      setImportWarnings(data.warnings);
+      if (data.jobs[0]) {
+        setSelectedJob(data.jobs[0]);
+      }
+      await loadJobs();
+      setStatus(`Extracted ${data.jobs.length} job${data.jobs.length === 1 ? "" : "s"}`);
+    } catch (extractError) {
+      setError(extractError instanceof Error ? extractError.message : "Extraction failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleReviewJob = async (id: string) => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ job: Job; review: AiReview }>(`/jobs/${id}/review`, {
+        method: "POST"
+      });
+
+      setSelectedJob(data.job);
+      await loadJobs();
+      setStatus(`Review complete: ${data.review.decision}`);
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Review failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleArchiveJob = async (id: string) => {
     setIsBusy(true);
     setError("");
@@ -327,8 +406,11 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setProfile(null);
       setJobs([]);
       setSelectedJob(null);
+      setExtractedJobs([]);
+      setImportWarnings([]);
       setProfileForm(emptyProfileForm);
       setJobForm(emptyJobForm);
+      setImportForm(emptyImportForm);
       setStatus("Signed out");
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : "Logout failed");
@@ -351,11 +433,18 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const updateImportField = (field: keyof ImportFormState, value: string) => {
+    setImportForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
   return (
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 04</p>
+          <p className="eyebrow">Milestone 05</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
@@ -368,6 +457,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           onClick={() => setActiveView("profile")}
         >
           Candidate Profile
+        </button>
+        <button
+          className={activeView === "import" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveView("import")}
+        >
+          Import/Paste
         </button>
         <button
           className={activeView === "jobs" ? "active" : ""}
@@ -515,6 +611,86 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               </button>
             </div>
           </form>
+        ) : activeView === "import" ? (
+          <section className="profile-panel">
+            <div className="section-heading">
+              <h2>Import/Paste</h2>
+            </div>
+
+            <form className="job-form" onSubmit={handleExtractJobs}>
+              <div className="form-grid">
+                <label>
+                  Source type
+                  <input
+                    value={importForm.sourceType}
+                    onChange={(event) => updateImportField("sourceType", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Source name
+                  <input
+                    value={importForm.sourceName}
+                    onChange={(event) => updateImportField("sourceName", event.target.value)}
+                  />
+                </label>
+
+                <label className="wide">
+                  Pasted job or email text
+                  <textarea
+                    required
+                    value={importForm.sourceText}
+                    onChange={(event) => updateImportField("sourceText", event.target.value)}
+                    rows={12}
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user || !importForm.sourceText.trim()} type="submit">
+                  Extract jobs
+                </button>
+              </div>
+            </form>
+
+            {importWarnings.length > 0 ? (
+              <div className="description-block">
+                <h3>Warnings</h3>
+                <ul className="compact-list">
+                  {importWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="description-block">
+              <h3>Created Jobs</h3>
+              {extractedJobs.length === 0 ? <p className="muted">No imported jobs yet.</p> : null}
+              <ul className="job-list">
+                {extractedJobs.map((job) => (
+                  <li key={job.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJob(job);
+                        setActiveView("jobs");
+                      }}
+                    >
+                      <span>
+                        <strong>{job.title}</strong>
+                        <small>{job.company}</small>
+                      </span>
+                      <span className="badge-row">
+                        <em>{job.status}</em>
+                        <em>{job.sourceQuality}</em>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
         ) : (
           <section className="profile-panel">
             <div className="section-heading">
@@ -638,6 +814,15 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         Archive
                       </button>
                     </div>
+                    <div className="button-row">
+                      <button
+                        disabled={isBusy || !user}
+                        type="button"
+                        onClick={() => void handleReviewJob(selectedJob.id)}
+                      >
+                        Run mock AI review
+                      </button>
+                    </div>
                     <dl className="detail-list">
                       <div>
                         <dt>Status</dt>
@@ -675,6 +860,48 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                     <div className="description-block">
                       <h4>Description</h4>
                       <p>{selectedJob.description?.fullText ?? "No full description saved."}</p>
+                    </div>
+                    <div className="description-block">
+                      <h4>Latest AI Review</h4>
+                      {selectedJob.latestAiReview ? (
+                        <div className="review-block">
+                          <dl className="detail-list">
+                            <div>
+                              <dt>Score</dt>
+                              <dd>{selectedJob.latestAiReview.score}</dd>
+                            </div>
+                            <div>
+                              <dt>Decision</dt>
+                              <dd>{selectedJob.latestAiReview.decision}</dd>
+                            </div>
+                          </dl>
+                          <p>{selectedJob.latestAiReview.reviewText}</p>
+                          <h5>Risk flags</h5>
+                          {selectedJob.latestAiReview.riskFlags.length > 0 ? (
+                            <ul className="compact-list">
+                              {selectedJob.latestAiReview.riskFlags.map((flag) => (
+                                <li key={flag}>{flag}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">No risk flags.</p>
+                          )}
+                          <h5>CV angle</h5>
+                          <p>{selectedJob.latestAiReview.cvAngle}</p>
+                          <h5>Clarification questions</h5>
+                          {selectedJob.latestAiReview.clarificationQuestions.length > 0 ? (
+                            <ul className="compact-list">
+                              {selectedJob.latestAiReview.clarificationQuestions.map((question) => (
+                                <li key={question}>{question}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">No clarification questions.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="muted">No AI review yet.</p>
+                      )}
                     </div>
                   </>
                 ) : (

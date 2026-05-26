@@ -14,6 +14,7 @@ const parsePort = (value: string | undefined, fallback: number) => {
 };
 
 export const env = {
+  aiServiceUrl: process.env.AI_SERVICE_URL ?? "http://localhost:8000",
   authCookieName: process.env.AUTH_COOKIE_NAME ?? "jobcc_session",
   databaseUrl: process.env.DATABASE_URL,
   host: process.env.API_HOST ?? "127.0.0.1",

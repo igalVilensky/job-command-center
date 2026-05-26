@@ -1,4 +1,4 @@
-import type { Job, JobDescription, JobSource } from "@prisma/client";
+import type { AiReview, Job, JobDescription, JobSource } from "@prisma/client";
 import { HttpError } from "./http-error";
 
 const jobStatuses = new Set([
@@ -104,6 +104,7 @@ export type JobUpdateData = {
 type JobWithRelations = Job & {
   description: JobDescription | null;
   source: JobSource | null;
+  aiReviews?: AiReview[];
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -363,27 +364,40 @@ export const validateJobUpdate = (body: unknown): JobUpdateData => {
 export const shouldCreateDescription = (description: JobDescriptionInput) =>
   hasDescriptionText(description);
 
-export const serializeJob = (job: JobWithRelations) => ({
-  ...job,
-  importedAt: job.importedAt.toISOString(),
-  createdAt: job.createdAt.toISOString(),
-  updatedAt: job.updatedAt.toISOString(),
-  archivedAt: job.archivedAt?.toISOString() ?? null,
-  source: job.source
+export const serializeAiReview = (review: AiReview | null) =>
+  review
     ? {
-        ...job.source,
-        createdAt: job.source.createdAt.toISOString(),
-        updatedAt: job.source.updatedAt.toISOString()
+        ...review,
+        createdAt: review.createdAt.toISOString()
       }
-    : null,
-  description: job.description
-    ? {
-        ...job.description,
-        createdAt: job.description.createdAt.toISOString(),
-        updatedAt: job.description.updatedAt.toISOString()
-      }
-    : null
-});
+    : null;
+
+export const serializeJob = (job: JobWithRelations) => {
+  const { aiReviews, ...jobWithoutReviews } = job;
+
+  return {
+    ...jobWithoutReviews,
+    importedAt: job.importedAt.toISOString(),
+    createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
+    archivedAt: job.archivedAt?.toISOString() ?? null,
+    source: job.source
+      ? {
+          ...job.source,
+          createdAt: job.source.createdAt.toISOString(),
+          updatedAt: job.source.updatedAt.toISOString()
+        }
+      : null,
+    description: job.description
+      ? {
+          ...job.description,
+          createdAt: job.description.createdAt.toISOString(),
+          updatedAt: job.description.updatedAt.toISOString()
+        }
+      : null,
+    latestAiReview: serializeAiReview(aiReviews?.[0] ?? null)
+  };
+};
 
 export const hasFullDescription = (description: JobDescriptionInput) =>
   Boolean(description.fullText);

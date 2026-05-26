@@ -3,4 +3,4 @@ from app.providers.mock import MockProvider
 
 
 def get_provider(config: ProviderConfig) -> MockProvider:
-  return MockProvider(configured_provider=config.provider)
+    return MockProvider(configured_provider=config.provider)

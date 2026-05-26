@@ -122,6 +122,11 @@ h4 {
   font-size: 0.95rem;
 }
 
+h5 {
+  font-size: 0.9rem;
+  margin: 14px 0 6px;
+}
+
 .api-pill {
   background: #e8ecef;
   border: 1px solid #d4dbe1;
@@ -298,11 +303,23 @@ h4 {
   padding-top: 14px;
 }
 
-.description-block p {
+.description-block p,
+.review-block p {
   color: #2b3138;
   line-height: 1.55;
   margin: 8px 0 0;
   white-space: pre-wrap;
+}
+
+.compact-list {
+  color: #2b3138;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.review-block {
+  margin-top: 8px;
 }
 
 .muted {
