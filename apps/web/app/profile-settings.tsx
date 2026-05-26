@@ -51,6 +51,13 @@ type Job = {
   url: string | null;
   sourceQuality: string;
   status: string;
+  userDecision: string | null;
+  applicationStatus: string | null;
+  userNotes: string | null;
+  nextAction: string | null;
+  followUpDate: string | null;
+  appliedAt: string | null;
+  rejectedAt: string | null;
   importedAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -86,6 +93,14 @@ type ImportFormState = {
   sourceName: string;
 };
 
+type PipelineFormState = {
+  userDecision: string;
+  applicationStatus: string;
+  userNotes: string;
+  nextAction: string;
+  followUpDate: string;
+};
+
 type ActiveView = "profile" | "import" | "jobs";
 
 const emptyProfileForm: ProfileFormState = {
@@ -116,6 +131,14 @@ const emptyImportForm: ImportFormState = {
   sourceName: ""
 };
 
+const emptyPipelineForm: PipelineFormState = {
+  userDecision: "undecided",
+  applicationStatus: "not_started",
+  userNotes: "",
+  nextAction: "",
+  followUpDate: ""
+};
+
 const remoteTypeOptions = [
   "unknown",
   "remote",
@@ -123,6 +146,30 @@ const remoteTypeOptions = [
   "hybrid",
   "homeoffice_possible",
   "onsite"
+];
+
+const userDecisionOptions = [
+  "undecided",
+  "interested",
+  "maybe",
+  "not_interested",
+  "applied",
+  "rejected",
+  "interviewing",
+  "offer",
+  "archived"
+];
+
+const applicationStatusOptions = [
+  "not_started",
+  "preparing",
+  "applied",
+  "follow_up_needed",
+  "interviewing",
+  "rejected",
+  "offer",
+  "accepted",
+  "declined"
 ];
 
 const listToText = (items: string[]) => items.join(", ");
@@ -143,6 +190,19 @@ const profileToForm = (profile: Profile): ProfileFormState => ({
   germanLevel: profile.germanLevel ?? "",
   englishLevel: profile.englishLevel ?? "",
   profileNotes: profile.profileNotes ?? ""
+});
+
+const dateToInput = (value: string | null) => (value ? value.slice(0, 10) : "");
+
+const formatDate = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString() : "Not set";
+
+const jobToPipelineForm = (job: Job): PipelineFormState => ({
+  userDecision: job.userDecision ?? "undecided",
+  applicationStatus: job.applicationStatus ?? "not_started",
+  userNotes: job.userNotes ?? "",
+  nextAction: job.nextAction ?? "",
+  followUpDate: dateToInput(job.followUpDate)
 });
 
 const parseResponse = async <T,>(response: Response): Promise<T> => {
@@ -169,12 +229,15 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
   const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
   const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
+  const [pipelineForm, setPipelineForm] = useState<PipelineFormState>(emptyPipelineForm);
   const [extractedJobs, setExtractedJobs] = useState<Job[]>([]);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [userDecisionFilter, setUserDecisionFilter] = useState("");
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -226,6 +289,10 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     void loadSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setPipelineForm(selectedJob ? jobToPipelineForm(selectedJob) : emptyPipelineForm);
+  }, [selectedJob]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -392,6 +459,41 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handlePipelineSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!selectedJob) {
+      return;
+    }
+
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ job: Job }>(`/jobs/${selectedJob.id}/pipeline`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          userDecision: pipelineForm.userDecision || null,
+          applicationStatus: pipelineForm.applicationStatus || null,
+          userNotes: pipelineForm.userNotes.trim() || null,
+          nextAction: pipelineForm.nextAction.trim() || null,
+          followUpDate: pipelineForm.followUpDate
+            ? `${pipelineForm.followUpDate}T00:00:00.000Z`
+            : null
+        })
+      });
+
+      setSelectedJob(data.job);
+      await loadJobs();
+      setStatus("Pipeline saved");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Pipeline save failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleLogout = async () => {
     setIsBusy(true);
     setError("");
@@ -411,6 +513,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setProfileForm(emptyProfileForm);
       setJobForm(emptyJobForm);
       setImportForm(emptyImportForm);
+      setPipelineForm(emptyPipelineForm);
+      setUserDecisionFilter("");
+      setApplicationStatusFilter("");
       setStatus("Signed out");
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : "Logout failed");
@@ -440,11 +545,28 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const updatePipelineField = (field: keyof PipelineFormState, value: string) => {
+    setPipelineForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const filteredJobs = jobs.filter((job) => {
+    const matchesDecision =
+      !userDecisionFilter || (job.userDecision ?? "undecided") === userDecisionFilter;
+    const matchesApplicationStatus =
+      !applicationStatusFilter ||
+      (job.applicationStatus ?? "not_started") === applicationStatusFilter;
+
+    return matchesDecision && matchesApplicationStatus;
+  });
+
   return (
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 05</p>
+          <p className="eyebrow">Milestone 07</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
@@ -684,6 +806,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                       <span className="badge-row">
                         <em>{job.status}</em>
                         <em>{job.sourceQuality}</em>
+                        <em>{job.applicationStatus ?? "not_started"}</em>
                       </span>
                     </button>
                   </li>
@@ -776,12 +899,47 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               </div>
             </form>
 
+            <div className="filter-row" aria-label="Job filters">
+              <label>
+                User decision
+                <select
+                  value={userDecisionFilter}
+                  onChange={(event) => setUserDecisionFilter(event.target.value)}
+                >
+                  <option value="">All decisions</option>
+                  {userDecisionOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Application status
+                <select
+                  value={applicationStatusFilter}
+                  onChange={(event) => setApplicationStatusFilter(event.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {applicationStatusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <div className="jobs-layout">
               <section>
                 <h3>Active Jobs</h3>
                 {jobs.length === 0 ? <p className="muted">No active jobs yet.</p> : null}
+                {jobs.length > 0 && filteredJobs.length === 0 ? (
+                  <p className="muted">No jobs match the selected filters.</p>
+                ) : null}
                 <ul className="job-list">
-                  {jobs.map((job) => (
+                  {filteredJobs.map((job) => (
                     <li key={job.id}>
                       <button type="button" onClick={() => void loadJob(job.id)}>
                         <span>
@@ -791,6 +949,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         <span className="badge-row">
                           <em>{job.status}</em>
                           <em>{job.sourceQuality}</em>
+                          <em>{job.applicationStatus ?? "not_started"}</em>
+                          <em>{job.userDecision ?? "undecided"}</em>
                         </span>
                       </button>
                     </li>
@@ -857,6 +1017,92 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         </dd>
                       </div>
                     </dl>
+                    <form className="description-block pipeline-form" onSubmit={handlePipelineSave}>
+                      <div className="section-heading">
+                        <h4>Application Pipeline</h4>
+                        <button disabled={isBusy || !user} type="submit">
+                          Save pipeline
+                        </button>
+                      </div>
+
+                      <div className="form-grid">
+                        <label>
+                          User decision
+                          <select
+                            value={pipelineForm.userDecision}
+                            onChange={(event) =>
+                              updatePipelineField("userDecision", event.target.value)
+                            }
+                          >
+                            {userDecisionOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label>
+                          Application status
+                          <select
+                            value={pipelineForm.applicationStatus}
+                            onChange={(event) =>
+                              updatePipelineField("applicationStatus", event.target.value)
+                            }
+                          >
+                            {applicationStatusOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="wide">
+                          User notes
+                          <textarea
+                            value={pipelineForm.userNotes}
+                            onChange={(event) =>
+                              updatePipelineField("userNotes", event.target.value)
+                            }
+                            rows={4}
+                          />
+                        </label>
+
+                        <label className="wide">
+                          Next action
+                          <textarea
+                            value={pipelineForm.nextAction}
+                            onChange={(event) =>
+                              updatePipelineField("nextAction", event.target.value)
+                            }
+                            rows={3}
+                          />
+                        </label>
+
+                        <label>
+                          Follow-up date
+                          <input
+                            value={pipelineForm.followUpDate}
+                            onChange={(event) =>
+                              updatePipelineField("followUpDate", event.target.value)
+                            }
+                            type="date"
+                          />
+                        </label>
+                      </div>
+
+                      <dl className="detail-list">
+                        <div>
+                          <dt>Applied at</dt>
+                          <dd>{formatDate(selectedJob.appliedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Rejected at</dt>
+                          <dd>{formatDate(selectedJob.rejectedAt)}</dd>
+                        </div>
+                      </dl>
+                    </form>
                     <div className="description-block">
                       <h4>Description</h4>
                       <p>{selectedJob.description?.fullText ?? "No full description saved."}</p>

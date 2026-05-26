@@ -34,6 +34,30 @@ const sourceQualities = new Set([
   "unknown"
 ]);
 
+const userDecisions = new Set([
+  "undecided",
+  "interested",
+  "maybe",
+  "not_interested",
+  "applied",
+  "rejected",
+  "interviewing",
+  "offer",
+  "archived"
+]);
+
+const applicationStatuses = new Set([
+  "not_started",
+  "preparing",
+  "applied",
+  "follow_up_needed",
+  "interviewing",
+  "rejected",
+  "offer",
+  "accepted",
+  "declined"
+]);
+
 const createFields = new Set([
   "company",
   "title",
@@ -54,6 +78,16 @@ const updateFields = new Set([
   ...createFields,
   "status",
   "sourceQuality"
+]);
+
+const pipelineFields = new Set([
+  "userDecision",
+  "applicationStatus",
+  "userNotes",
+  "nextAction",
+  "followUpDate",
+  "appliedAt",
+  "rejectedAt"
 ]);
 
 type JobDescriptionInput = {
@@ -100,6 +134,19 @@ export type JobUpdateData = {
   description: JobDescriptionInput;
   hasDescriptionUpdate: boolean;
 };
+
+export type JobPipelineUpdateData = Partial<
+  Pick<
+    Job,
+    | "userDecision"
+    | "applicationStatus"
+    | "userNotes"
+    | "nextAction"
+    | "followUpDate"
+    | "appliedAt"
+    | "rejectedAt"
+  >
+>;
 
 type JobWithRelations = Job & {
   description: JobDescription | null;
@@ -224,6 +271,60 @@ const optionalSourceQuality = (value: unknown) => {
   return sourceQuality;
 };
 
+const optionalUserDecision = (value: unknown) => {
+  const userDecision = optionalString(value, "userDecision");
+
+  if (userDecision === undefined || userDecision === null) {
+    return userDecision;
+  }
+
+  if (!userDecisions.has(userDecision)) {
+    throw new HttpError(400, "userDecision is not supported");
+  }
+
+  return userDecision;
+};
+
+const optionalApplicationStatus = (value: unknown) => {
+  const applicationStatus = optionalString(value, "applicationStatus");
+
+  if (applicationStatus === undefined || applicationStatus === null) {
+    return applicationStatus;
+  }
+
+  if (!applicationStatuses.has(applicationStatus)) {
+    throw new HttpError(400, "applicationStatus is not supported");
+  }
+
+  return applicationStatus;
+};
+
+const optionalDate = (value: unknown, field: string) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a valid date string or null`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${field} must be a valid date string or null`);
+  }
+
+  return date;
+};
+
 const readDescription = (body: Record<string, unknown>) => ({
   summaryText: optionalString(body.summaryText, "summaryText"),
   fullText: optionalString(body.fullDescription, "fullDescription"),
@@ -253,6 +354,30 @@ export const validateJobStatusFilter = (value: unknown) => {
 
   if (typeof value !== "string" || !jobStatuses.has(value)) {
     throw new HttpError(400, "status is not supported");
+  }
+
+  return value;
+};
+
+export const validateJobUserDecisionFilter = (value: unknown) => {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !userDecisions.has(value)) {
+    throw new HttpError(400, "userDecision is not supported");
+  }
+
+  return value;
+};
+
+export const validateJobApplicationStatusFilter = (value: unknown) => {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !applicationStatuses.has(value)) {
+    throw new HttpError(400, "applicationStatus is not supported");
   }
 
   return value;
@@ -361,6 +486,46 @@ export const validateJobUpdate = (body: unknown): JobUpdateData => {
   return { job, description, hasDescriptionUpdate };
 };
 
+export const validateJobPipelineUpdate = (body: unknown): JobPipelineUpdateData => {
+  if (!isPlainObject(body)) {
+    throw new HttpError(400, "Request body must be an object");
+  }
+
+  rejectUnknownFields(body, pipelineFields);
+
+  const pipeline: JobPipelineUpdateData = {};
+
+  if ("userDecision" in body) {
+    pipeline.userDecision = optionalUserDecision(body.userDecision);
+  }
+
+  if ("applicationStatus" in body) {
+    pipeline.applicationStatus = optionalApplicationStatus(body.applicationStatus);
+  }
+
+  if ("userNotes" in body) {
+    pipeline.userNotes = optionalString(body.userNotes, "userNotes");
+  }
+
+  if ("nextAction" in body) {
+    pipeline.nextAction = optionalString(body.nextAction, "nextAction");
+  }
+
+  if ("followUpDate" in body) {
+    pipeline.followUpDate = optionalDate(body.followUpDate, "followUpDate");
+  }
+
+  if ("appliedAt" in body) {
+    pipeline.appliedAt = optionalDate(body.appliedAt, "appliedAt");
+  }
+
+  if ("rejectedAt" in body) {
+    pipeline.rejectedAt = optionalDate(body.rejectedAt, "rejectedAt");
+  }
+
+  return pipeline;
+};
+
 export const shouldCreateDescription = (description: JobDescriptionInput) =>
   hasDescriptionText(description);
 
@@ -381,6 +546,9 @@ export const serializeJob = (job: JobWithRelations) => {
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
     archivedAt: job.archivedAt?.toISOString() ?? null,
+    followUpDate: job.followUpDate?.toISOString() ?? null,
+    appliedAt: job.appliedAt?.toISOString() ?? null,
+    rejectedAt: job.rejectedAt?.toISOString() ?? null,
     source: job.source
       ? {
           ...job.source,

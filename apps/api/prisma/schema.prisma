@@ -58,32 +58,41 @@ model JobSource {
 }
 
 model Job {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceId         String?
-  source           JobSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  description      JobDescription?
-  aiReviews        AiReview[]
-  automationRuns   AutomationRun[]
-  externalSourceId String?
-  company          String
-  title            String
-  location         String?
-  remoteType       String          @default("unknown")
-  salaryMinEur     Int?
-  salaryMaxEur     Int?
-  salaryText       String?
-  url              String?
-  sourceQuality    String          @default("unknown")
-  status           String          @default("imported")
-  importedAt       DateTime        @default(now())
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  archivedAt       DateTime?
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceId          String?
+  source            JobSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  description       JobDescription?
+  aiReviews         AiReview[]
+  automationRuns    AutomationRun[]
+  externalSourceId  String?
+  company           String
+  title             String
+  location          String?
+  remoteType        String          @default("unknown")
+  salaryMinEur      Int?
+  salaryMaxEur      Int?
+  salaryText        String?
+  url               String?
+  sourceQuality     String          @default("unknown")
+  status            String          @default("imported")
+  userDecision      String?         @default("undecided")
+  applicationStatus String?         @default("not_started")
+  userNotes         String?
+  nextAction        String?
+  followUpDate      DateTime?
+  appliedAt         DateTime?
+  rejectedAt        DateTime?
+  importedAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  archivedAt        DateTime?
 
   @@index([userId, archivedAt])
   @@index([userId, status])
+  @@index([userId, applicationStatus])
+  @@index([userId, userDecision])
   @@index([sourceId])
 }
 

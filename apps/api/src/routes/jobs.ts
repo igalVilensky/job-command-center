@@ -7,9 +7,12 @@ import {
   serializeAiReview,
   serializeJob,
   shouldCreateDescription,
+  validateJobApplicationStatusFilter,
   validateJobCreate,
+  validateJobPipelineUpdate,
   validateJobStatusFilter,
-  validateJobUpdate
+  validateJobUpdate,
+  validateJobUserDecisionFilter
 } from "../lib/job-validation";
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../middleware/async-handler";
@@ -74,11 +77,15 @@ jobsRouter.get(
     const userId = getUserId(req as AuthenticatedRequest);
     const includeArchived = req.query.includeArchived === "true";
     const status = validateJobStatusFilter(req.query.status);
+    const userDecision = validateJobUserDecisionFilter(req.query.userDecision);
+    const applicationStatus = validateJobApplicationStatusFilter(req.query.applicationStatus);
     const jobs = await prisma.job.findMany({
       where: {
         userId,
         ...(includeArchived ? {} : { archivedAt: null }),
-        ...(status ? { status } : {})
+        ...(status ? { status } : {}),
+        ...(userDecision ? { userDecision } : {}),
+        ...(applicationStatus ? { applicationStatus } : {})
       },
       include: jobInclude,
       orderBy: {
@@ -183,6 +190,40 @@ jobsRouter.put(
         data: input.job,
         include: jobInclude
       });
+    });
+
+    res.status(200).json({ job: serializeJob(job) });
+  })
+);
+
+jobsRouter.patch(
+  "/:id/pipeline",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = getUserId(req as AuthenticatedRequest);
+    const existingJob = await findOwnedJob(req.params.id, userId);
+    const input = validateJobPipelineUpdate(req.body);
+    const nextApplicationStatus =
+      input.applicationStatus === undefined
+        ? existingJob.applicationStatus
+        : input.applicationStatus;
+    const nextAppliedAt = input.appliedAt === undefined ? existingJob.appliedAt : input.appliedAt;
+    const nextRejectedAt =
+      input.rejectedAt === undefined ? existingJob.rejectedAt : input.rejectedAt;
+    const now = new Date();
+
+    if (nextApplicationStatus === "applied" && !nextAppliedAt) {
+      input.appliedAt = now;
+    }
+
+    if (nextApplicationStatus === "rejected" && !nextRejectedAt) {
+      input.rejectedAt = now;
+    }
+
+    const job = await prisma.job.update({
+      where: { id: existingJob.id },
+      data: input,
+      include: jobInclude
     });
 
     res.status(200).json({ job: serializeJob(job) });

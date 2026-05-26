@@ -32,6 +32,38 @@ review_manually
 unknown
 ```
 
+## User decision
+
+The user's decision is separate from AI decision and job status:
+
+```text
+undecided
+interested
+maybe
+not_interested
+applied
+rejected
+interviewing
+offer
+archived
+```
+
+## Application status
+
+Application status tracks the user's real application progress:
+
+```text
+not_started
+preparing
+applied
+follow_up_needed
+interviewing
+rejected
+offer
+accepted
+declined
+```
+
 ## Source quality
 
 ```text
@@ -59,3 +91,6 @@ unknown
 - Failed AI analysis should not delete or hide the job.
 - A job can be `analyzed` and still have AI decision `skip`.
 - A job can be `needs_full_description` and still be manually archived.
+- User decision and application status are manually controlled by the user.
+- When application status becomes `applied`, `applied_at` should be set if missing.
+- When application status becomes `rejected`, `rejected_at` should be set if missing.

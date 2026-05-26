@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 06 Groq provider phase.
+This project is currently in the Milestone 07 application pipeline phase.
 
 ## Existing prototype
 
@@ -77,11 +77,14 @@ Milestone 01 project skeleton has been created.
 - Job review creates an automation run, stores an AI review, and updates the job status to `analyzed`.
 - Job list excludes archived jobs by default.
 - Job reads/writes are scoped to the authenticated user.
+- Application pipeline fields exist on jobs for user decision, application status, notes, next action, follow-up date, applied date, and rejected date.
+- Authenticated pipeline updates are available through `PATCH /jobs/:id/pipeline`.
+- Pipeline updates are scoped to the authenticated user and validate allowed user decision/application status values.
+- `appliedAt` and `rejectedAt` are auto-set when application status becomes `applied` or `rejected`.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
-- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, and AI review action.
+- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, AI review action, and application pipeline editor.
 
 Not implemented yet:
 
-- application pipeline
 - Gemini/Ollama/OpenAI providers
 - Gmail/OAuth/integrations
