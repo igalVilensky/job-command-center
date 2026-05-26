@@ -36,23 +36,67 @@ const stringifyDetail = (detail: unknown) => {
   }
 };
 
+const safeTargetUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    url.username = url.username ? "redacted" : "";
+    url.password = url.password ? "redacted" : "";
+    for (const key of ["access_token", "api_key", "key", "token"]) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.set(key, "redacted");
+      }
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
+
+const aiServiceUrl = (path: string) => {
+  const baseUrl = env.aiServiceUrl.endsWith("/") ? env.aiServiceUrl : `${env.aiServiceUrl}/`;
+  return new URL(path.replace(/^\//, ""), baseUrl).toString();
+};
+
+const responsePayload = async (response: Response) => {
+  const text = await response.text().catch(() => "");
+  if (!text) {
+    return { payload: null, text };
+  }
+
+  try {
+    return { payload: JSON.parse(text) as unknown, text };
+  } catch {
+    return { payload: null, text };
+  }
+};
+
 const postJson = async (path: string, body: unknown) => {
-  const response = await fetch(`${env.aiServiceUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  const payload = await response.json().catch(() => null);
+  const targetUrl = aiServiceUrl(path);
+  const safeUrl = safeTargetUrl(targetUrl);
+  let response: Response;
+
+  try {
+    response = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`AI service request failed: target=${safeUrl} status=network_error detail=${detail}`);
+  }
+
+  const { payload, text } = await responsePayload(response);
 
   if (!response.ok) {
     const detail =
       payload && typeof payload === "object" && "detail" in payload
         ? stringifyDetail((payload as { detail?: unknown }).detail)
-        : `HTTP ${response.status}`;
+        : text || response.statusText || "empty response body";
 
-    throw new Error(`AI service ${path} failed: ${detail}`);
+    throw new Error(`AI service request failed: target=${safeUrl} status=${response.status} detail=${detail}`);
   }
 
   return payload;

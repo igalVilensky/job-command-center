@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev": "uvicorn app.main:app --reload --host 127.0.0.1 --port 8001",
     "build": "python3 -m compileall app",
     "lint": "python3 -m compileall app"
   }

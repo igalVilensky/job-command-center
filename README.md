@@ -66,7 +66,7 @@ The current repository state includes the initial runnable skeleton, database/au
 
 - `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, job inbox, and AI review views.
 - `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job routes, and authenticated AI orchestration routes.
-- `apps/ai-service`: FastAPI service on port 8000 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
+- `apps/ai-service`: FastAPI service on port 8001 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
 - `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `AiReview`, and `AutomationRun`.
 
@@ -92,7 +92,7 @@ Start Postgres:
 docker compose up -d postgres
 ```
 
-These commands assume local ports `3000`, `4000`, `8000`, and `5433` are free.
+These commands assume local ports `3000`, `4000`, `8001`, and `5433` are free.
 
 Prepare the API database:
 
@@ -121,7 +121,7 @@ cd apps/ai-service
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
 After the Python virtual environment is activated, the equivalent root command is:
@@ -134,8 +134,10 @@ Useful checks:
 
 ```bash
 curl http://localhost:4000/health
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 ```
+
+The API health response includes non-secret AI debugging fields: `aiServiceUrl`, `aiEnabled`, and `nodeEnv`. Restart the API after changing `.env` so those values are reloaded.
 
 AI service checks:
 
@@ -143,12 +145,12 @@ AI service checks:
 curl -i \
   -H "Content-Type: application/json" \
   -d '{"sourceText":"Company: Example GmbH\nTitle: Backend Engineer\nLocation: Berlin\nRemote: hybrid\nBuild APIs with TypeScript and Node.js.","sourceType":"paste","sourceName":"Local paste"}' \
-  http://127.0.0.1:8000/extract-jobs
+  http://127.0.0.1:8001/extract-jobs
 
 curl -i \
   -H "Content-Type: application/json" \
   -d '{"candidateProfile":{"targetRoles":["Backend Engineer"],"strongSkills":["TypeScript","Node.js"],"minimumSalaryEur":70000},"job":{"company":"Example GmbH","title":"Backend Engineer","location":"Berlin","remoteType":"hybrid","salaryText":"70000 EUR","sourceQuality":"full_description"},"description":{"fullText":"Build APIs with TypeScript and Node.js."}}' \
-  http://127.0.0.1:8000/review-job
+  http://127.0.0.1:8001/review-job
 ```
 
 Mock mode is the default and needs no AI key. To enable Groq locally, set placeholder values like these in your uncommitted `.env`, then restart the AI service:
@@ -279,7 +281,7 @@ AUTH_COOKIE_NAME="jobcc_session"
 JWT_EXPIRES_IN="7d"
 
 AI_ENABLED="true"
-AI_SERVICE_URL="http://localhost:8000"
+AI_SERVICE_URL="http://127.0.0.1:8001"
 AI_SERVICE_TOKEN=""
 
 AI_PROVIDER="mock"

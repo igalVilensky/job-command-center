@@ -158,7 +158,7 @@ aiRouter.post(
 
       res.status(502).json({
         error: {
-          message: "Mock AI extraction failed",
+          message: "AI extraction failed",
           statusCode: 502,
           runId: run.id,
           detail: message

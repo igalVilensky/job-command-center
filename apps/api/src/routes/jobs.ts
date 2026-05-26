@@ -307,7 +307,7 @@ jobsRouter.post(
 
       res.status(502).json({
         error: {
-          message: "Mock AI review failed",
+          message: "AI review failed",
           statusCode: 502,
           runId: run.id,
           detail: message

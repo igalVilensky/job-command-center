@@ -1,7 +1,8 @@
 import json
-import urllib.error
-import urllib.request
+import logging
 from typing import Any
+
+import httpx
 
 from app.config import ProviderConfig
 from app.providers.base import ProviderError
@@ -19,6 +20,7 @@ REMOTE_TYPES = {
 SOURCE_QUALITIES = {"full_description", "digest_summary", "email_summary", "unknown"}
 CONFIDENCE_VALUES = {"high", "medium", "low"}
 REVIEW_DECISIONS = {"apply", "maybe", "skip", "review_manually"}
+logger = logging.getLogger(__name__)
 
 
 EXTRACTION_SCHEMA_EXAMPLE = {
@@ -44,14 +46,37 @@ EXTRACTION_SCHEMA_EXAMPLE = {
 }
 
 REVIEW_SCHEMA_EXAMPLE = {
-    "score": 0,
-    "decision": "review_manually",
-    "review": "",
-    "riskFlags": [],
-    "cvAngle": "",
-    "clarificationQuestions": [],
-    "confidence": "low",
+    "score": 62,
+    "decision": "maybe",
+    "review": (
+        "The role matches the candidate's web application experience and includes remote work. "
+        "Main risks are a partial stack mismatch and salary or source details that need confirmation."
+    ),
+    "riskFlags": ["Potential stack mismatch", "Confirm salary expectations"],
+    "cvAngle": "Lead with matching web application work, then address stack gaps directly.",
+    "clarificationQuestions": ["Is the role product-focused or agency/client-project based?"],
+    "confidence": "medium",
 }
+
+EXPECTED_REVIEW_KEYS = (
+    "score",
+    "decision",
+    "review",
+    "riskFlags",
+    "cvAngle",
+    "clarificationQuestions",
+    "confidence",
+)
+SCORE_BY_DECISION = {
+    "apply": 80,
+    "maybe": 60,
+    "review_manually": 45,
+    "skip": 25,
+}
+REVIEW_ALIASES = ("review", "reviewText", "explanation", "summary")
+CV_ANGLE_ALIASES = ("cvAngle", "cv_angle", "cvAngleText")
+RISK_FLAGS_ALIASES = ("riskFlags", "risks")
+CLARIFICATION_QUESTION_ALIASES = ("clarificationQuestions", "questions", "clarifyingQuestions")
 
 
 def _truncate_text(value: str, limit: int) -> str:
@@ -226,25 +251,119 @@ def _normalize_extraction(payload: dict[str, Any]) -> dict[str, object]:
     }
 
 
-def _normalize_review(payload: dict[str, Any]) -> dict[str, object]:
-    review_text = _string(_required(payload, "review", "review"), "review.review")
-    cv_angle = _string(_required(payload, "cvAngle", "review"), "review.cvAngle")
+def _decision_from_score(score: int) -> str:
+    if score >= 75:
+        return "apply"
+    if score >= 50:
+        return "maybe"
+    if score >= 30:
+        return "review_manually"
+    return "skip"
 
-    if not review_text:
-        raise ProviderError("review.review is required", 502)
-    if not cv_angle:
-        raise ProviderError("review.cvAngle is required", 502)
+
+def _confidence_from_score(score: int) -> str:
+    if score >= 75:
+        return "high"
+    if score >= 45:
+        return "medium"
+    return "low"
+
+
+def _payload_keys(payload: dict[str, Any]) -> list[str]:
+    return sorted(str(key) for key in payload.keys())
+
+
+def _string_from_aliases(payload: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        if key in payload:
+            value = _string(payload[key], f"review.{key}")
+            if value:
+                return value
+    return None
+
+
+def _string_array_from_aliases(payload: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    for key in keys:
+        if key in payload:
+            return _string_array(payload[key], f"review.{key}")
+    return []
+
+
+def _empty_string_fields(payload: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    return [key for key in keys if key in payload and isinstance(payload[key], str) and not payload[key].strip()]
+
+
+def _fallback_review_text(decision: str, score: int) -> str:
+    return (
+        f"AI review completed with decision '{decision}' and score {score}, but the provider did not "
+        "return detailed review text. Recheck salary, location, remote policy, tech stack, and source "
+        "completeness before deciding."
+    )
+
+
+def _fallback_cv_angle(decision: str, score: int) -> str:
+    return (
+        f"For this {decision} decision at score {score}, emphasize concrete matching skills and address "
+        "the largest gaps in stack, salary, location, remote setup, or source completeness."
+    )
+
+
+def _log_review_fallback(payload: dict[str, Any], fallback_fields: list[str], empty_fields: list[str]) -> None:
+    missing_fields = [key for key in EXPECTED_REVIEW_KEYS if key not in payload]
+    logger.warning(
+        "Groq review normalization fallback used; fallback_fields=%s missing_fields=%s empty_fields=%s parsed_keys=%s",
+        fallback_fields,
+        missing_fields,
+        empty_fields,
+        _payload_keys(payload),
+    )
+
+
+def _normalize_review(payload: dict[str, Any]) -> dict[str, object]:
+    score = _score(payload["score"]) if "score" in payload else None
+    decision = _enum(payload["decision"], "review.decision", REVIEW_DECISIONS) if "decision" in payload else None
+
+    if score is None and decision is None:
+        raise ProviderError("review.score or review.decision is required", 502)
+
+    if score is None:
+        score = SCORE_BY_DECISION[decision]
+    if decision is None:
+        decision = _decision_from_score(score)
+
+    confidence = (
+        _enum(payload["confidence"], "review.confidence", CONFIDENCE_VALUES)
+        if "confidence" in payload
+        else _confidence_from_score(score)
+    )
+
+    review_text = _string_from_aliases(payload, REVIEW_ALIASES)
+    cv_angle = _string_from_aliases(payload, CV_ANGLE_ALIASES)
+    risk_flags = _string_array_from_aliases(payload, RISK_FLAGS_ALIASES)
+    clarification_questions = _string_array_from_aliases(payload, CLARIFICATION_QUESTION_ALIASES)
+
+    fallback_fields = []
+    empty_fields = []
+    if review_text is None:
+        review_text = _fallback_review_text(decision, score)
+        fallback_fields.append("review")
+        empty_fields.extend(_empty_string_fields(payload, REVIEW_ALIASES))
+    if cv_angle is None:
+        cv_angle = _fallback_cv_angle(decision, score)
+        fallback_fields.append("cvAngle")
+        empty_fields.extend(_empty_string_fields(payload, CV_ANGLE_ALIASES))
+
+    if fallback_fields:
+        _log_review_fallback(payload, fallback_fields, empty_fields)
 
     return {
-        "score": _score(_required(payload, "score", "review")),
-        "decision": _enum(_required(payload, "decision", "review"), "review.decision", REVIEW_DECISIONS),
+        "score": score,
+        "decision": decision,
         "review": review_text,
-        "riskFlags": _string_array(_required(payload, "riskFlags", "review"), "review.riskFlags"),
+        "riskFlags": risk_flags,
         "cvAngle": cv_angle,
-        "clarificationQuestions": _string_array(
-            _required(payload, "clarificationQuestions", "review"), "review.clarificationQuestions"
-        ),
-        "confidence": _enum(_required(payload, "confidence", "review"), "review.confidence", CONFIDENCE_VALUES),
+        "clarificationQuestions": clarification_questions,
+        "confidence": confidence,
     }
 
 
@@ -313,7 +432,7 @@ def _build_review_messages(
     description: dict[str, Any] | None,
     max_description_chars: int,
 ) -> list[dict[str, str]]:
-    schema = _json_dump(REVIEW_SCHEMA_EXAMPLE)
+    example = json.dumps(REVIEW_SCHEMA_EXAMPLE, ensure_ascii=False, separators=(",", ":"), default=str)
     compact_payload = {
         "candidateProfile": candidate_profile,
         "job": job,
@@ -331,8 +450,11 @@ def _build_review_messages(
         {
             "role": "user",
             "content": f"""
-Return exactly one JSON object matching this schema:
-{schema}
+Return exactly one JSON object with exactly these keys:
+score, decision, review, riskFlags, cvAngle, clarificationQuestions, confidence.
+Do not omit keys. Do not add keys.
+Compact valid example:
+{example}
 
 Allowed decision values: apply, maybe, skip, review_manually.
 Allowed confidence values: high, medium, low.
@@ -344,6 +466,12 @@ Decision guidance:
 - Use review_manually when the source is incomplete or confidence is low.
 
 Rules:
+- review must be a non-empty string with 2-4 sentences.
+- cvAngle must be a non-empty string.
+- score must be realistic; use 0 only for completely irrelevant jobs.
+- Evaluate salary, location, remote policy, tech stack, and source completeness.
+- Mention concrete matching and mismatch signals from the job.
+- Put concrete salary, stack, agency/client-project, or source risks in riskFlags when present.
 - Do not mark salary as a risk if the range includes the candidate minimum.
 - Do not assume "Homeoffice möglich" means fully remote.
 - Do not treat location as blocker if remote-first or fully remote is clear.
@@ -427,26 +555,29 @@ class GroqProvider:
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
-        request = urllib.request.Request(
-            self.config.groq_api_url,
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.config.groq_api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
+        request_body = json.dumps(body).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {self.config.groq_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "job-command-center-ai-service/0.1",
+        }
 
         try:
-            with urllib.request.urlopen(request, timeout=45) as response:
-                response_body = response.read().decode("utf-8")
-        except urllib.error.HTTPError as error:
-            response_body = error.read().decode("utf-8", errors="replace")
-            detail = _extract_api_error(response_body)
-            raise ProviderError(f"Groq API returned HTTP {error.code}: {detail}", 502) from error
-        except (urllib.error.URLError, TimeoutError) as error:
+            response = httpx.post(
+                self.config.groq_api_url,
+                content=request_body,
+                headers=headers,
+                timeout=45,
+                follow_redirects=True,
+            )
+        except httpx.RequestError as error:
             raise ProviderError(f"Groq API network error: {error}", 502) from error
+
+        response_body = response.text
+        if response.status_code >= 400:
+            detail = _extract_api_error(response_body)
+            raise ProviderError(f"Groq API returned HTTP {response.status_code}: {detail}", 502)
 
         try:
             parsed = json.loads(response_body)
