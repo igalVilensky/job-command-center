@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 02 database/auth foundation phase.
+This project is currently in the Milestone 03 candidate profile settings phase.
 
 ## Existing prototype
 
@@ -32,7 +32,7 @@ Prototype capabilities:
 Milestone 01 project skeleton has been created.
 
 - pnpm workspace and Turbo root configuration exist.
-- `apps/web` Next.js placeholder exists and displays "Job Command Center".
+- `apps/web` Next.js app exists and displays "Job Command Center".
 - `apps/api` Express placeholder exists with `GET /health`.
 - `apps/ai-service` FastAPI placeholder exists with `GET /health`.
 - Docker Compose Postgres exists with local `jobcc` credentials.
@@ -49,11 +49,18 @@ Milestone 01 project skeleton has been created.
   - `GET /auth/me`
 - Passwords are hashed before storage.
 - Auth uses an HTTP-only cookie/JWT session.
+- Authenticated candidate profile routes exist:
+  - `GET /profile`
+  - `PUT /profile`
+- `GET /profile` creates a default profile when missing.
+- Profile updates validate allowed fields and are scoped to the authenticated user.
+- `apps/web` has a minimal demo-login candidate profile editor.
 
 Not implemented yet:
 
-- product features
 - job CRUD
-- candidate settings UI
+- job inbox
+- imports
+- application pipeline
 - real AI provider calls
 - Gmail/OAuth/integrations

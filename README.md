@@ -62,15 +62,15 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton plus the database/auth foundation:
+The current repository state includes the initial runnable skeleton, database/auth foundation, and candidate profile settings:
 
-- `apps/web`: Next.js + TypeScript placeholder on port 3000.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health` and basic email/password auth.
+- `apps/web`: Next.js + TypeScript app on port 3000 with a minimal authenticated candidate profile editor.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, and authenticated profile routes.
 - `apps/ai-service`: FastAPI service on port 8000 with `GET /health` and a mock provider placeholder.
 - `docker-compose.yml`: local PostgreSQL service.
 - `apps/api/prisma`: Prisma schema and initial migration for `User` and `CandidateProfile`.
 
-Product workflows, job CRUD, candidate settings UI, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Job CRUD, imports, AI review workflows, application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -154,6 +154,25 @@ curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/auth/me
 
 curl -i -b /tmp/jobcc-cookies.txt -c /tmp/jobcc-cookies.txt \
   -X POST http://127.0.0.1:4000/auth/logout
+```
+
+Profile checks:
+
+```bash
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@jobcc.local","password":"password123"}' \
+  http://127.0.0.1:4000/auth/login
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/profile
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -X PUT \
+  -d '{"targetRoles":["Backend Engineer"],"strongSkills":["TypeScript","Node.js"],"avoidSkills":["Cold calling"],"minimumSalaryEur":70000,"preferredLocations":["Berlin","Remote"],"remotePreference":"hybrid","germanLevel":"B1","englishLevel":"C1","profileNotes":"Prefers product engineering roles."}' \
+  http://127.0.0.1:4000/profile
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/profile
 ```
 
 The web app loads at `http://localhost:3000`.
