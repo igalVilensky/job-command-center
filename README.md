@@ -62,15 +62,15 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, and candidate profile settings:
+The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, and a manual job inbox:
 
-- `apps/web`: Next.js + TypeScript app on port 3000 with a minimal authenticated candidate profile editor.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, and authenticated profile routes.
+- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile and job inbox views.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile routes, and authenticated job routes.
 - `apps/ai-service`: FastAPI service on port 8000 with `GET /health` and a mock provider placeholder.
 - `docker-compose.yml`: local PostgreSQL service.
-- `apps/api/prisma`: Prisma schema and initial migration for `User` and `CandidateProfile`.
+- `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, and `JobDescription`.
 
-Job CRUD, imports, AI review workflows, application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Imports, AI review workflows, application pipeline, real AI provider calls, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -173,6 +173,32 @@ curl -i -b /tmp/jobcc-cookies.txt \
   http://127.0.0.1:4000/profile
 
 curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/profile
+```
+
+Job checks:
+
+```bash
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@jobcc.local","password":"password123"}' \
+  http://127.0.0.1:4000/auth/login
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"company":"Example GmbH","title":"Backend Engineer","location":"Berlin","remoteType":"hybrid","salaryText":"70000 EUR","url":"https://example.com/jobs/backend","fullDescription":"Build APIs with TypeScript."}' \
+  http://127.0.0.1:4000/jobs
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs/JOB_ID
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -X PUT \
+  -d '{"location":"Remote","salaryMinEur":70000,"salaryMaxEur":85000}' \
+  http://127.0.0.1:4000/jobs/JOB_ID
+
+curl -i -b /tmp/jobcc-cookies.txt -X POST http://127.0.0.1:4000/jobs/JOB_ID/archive
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/jobs
 ```
 
 The web app loads at `http://localhost:3000`.

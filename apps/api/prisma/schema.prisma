@@ -12,6 +12,8 @@ model User {
   email            String            @unique
   passwordHash     String
   candidateProfile CandidateProfile?
+  jobSources       JobSource[]
+  jobs             Job[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
@@ -37,4 +39,59 @@ model CandidateProfile {
   profileNotes          String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model JobSource {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType   String
+  sourceName   String?
+  externalId   String?
+  metadataJson Json?
+  jobs         Job[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Job {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceId         String?
+  source           JobSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  description      JobDescription?
+  externalSourceId String?
+  company          String
+  title            String
+  location         String?
+  remoteType       String          @default("unknown")
+  salaryMinEur     Int?
+  salaryMaxEur     Int?
+  salaryText       String?
+  url              String?
+  sourceQuality    String          @default("unknown")
+  status           String          @default("imported")
+  importedAt       DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  archivedAt       DateTime?
+
+  @@index([userId, archivedAt])
+  @@index([userId, status])
+  @@index([sourceId])
+}
+
+model JobDescription {
+  id            String   @id @default(cuid())
+  jobId         String   @unique
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  summaryText   String?
+  fullText      String?
+  rawSourceText String?
+  language      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

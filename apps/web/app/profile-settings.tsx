@@ -21,6 +21,31 @@ type Profile = {
   updatedAt: string;
 };
 
+type JobDescription = {
+  summaryText: string | null;
+  fullText: string | null;
+  rawSourceText: string | null;
+  language: string | null;
+};
+
+type Job = {
+  id: string;
+  company: string;
+  title: string;
+  location: string | null;
+  remoteType: string;
+  salaryMinEur: number | null;
+  salaryMaxEur: number | null;
+  salaryText: string | null;
+  url: string | null;
+  sourceQuality: string;
+  status: string;
+  importedAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  description: JobDescription | null;
+};
+
 type ProfileFormState = {
   targetRoles: string;
   strongSkills: string;
@@ -33,6 +58,18 @@ type ProfileFormState = {
   profileNotes: string;
 };
 
+type JobFormState = {
+  company: string;
+  title: string;
+  location: string;
+  remoteType: string;
+  salaryText: string;
+  url: string;
+  fullDescription: string;
+};
+
+type ActiveView = "profile" | "jobs";
+
 const emptyProfileForm: ProfileFormState = {
   targetRoles: "",
   strongSkills: "",
@@ -44,6 +81,25 @@ const emptyProfileForm: ProfileFormState = {
   englishLevel: "",
   profileNotes: ""
 };
+
+const emptyJobForm: JobFormState = {
+  company: "",
+  title: "",
+  location: "",
+  remoteType: "unknown",
+  salaryText: "",
+  url: "",
+  fullDescription: ""
+};
+
+const remoteTypeOptions = [
+  "unknown",
+  "remote",
+  "remote_first",
+  "hybrid",
+  "homeoffice_possible",
+  "onsite"
+];
 
 const listToText = (items: string[]) => items.join(", ");
 
@@ -81,13 +137,17 @@ const parseResponse = async <T,>(response: Response): Promise<T> => {
 };
 
 export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
+  const [activeView, setActiveView] = useState<ActiveView>("profile");
   const [loginForm, setLoginForm] = useState({
     email: "demo@jobcc.local",
     password: "password123"
   });
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
+  const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -114,12 +174,22 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setProfileForm(profileToForm(data.profile));
   };
 
+  const loadJobs = async () => {
+    const data = await request<{ jobs: Job[] }>("/jobs");
+    setJobs(data.jobs);
+  };
+
+  const loadJob = async (id: string) => {
+    const data = await request<{ job: Job }>(`/jobs/${id}`);
+    setSelectedJob(data.job);
+  };
+
   useEffect(() => {
     const loadSession = async () => {
       try {
         const data = await request<{ user: User }>("/auth/me");
         setUser(data.user);
-        await loadProfile();
+        await Promise.all([loadProfile(), loadJobs()]);
       } catch {
         setUser(null);
       }
@@ -142,7 +212,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setUser(data.user);
-      await loadProfile();
+      await Promise.all([loadProfile(), loadJobs()]);
       setStatus("Signed in");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
@@ -151,7 +221,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
-  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+  const handleProfileSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsBusy(true);
     setError("");
@@ -192,6 +262,57 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleJobCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ job: Job }>("/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          company: jobForm.company,
+          title: jobForm.title,
+          location: jobForm.location || null,
+          remoteType: jobForm.remoteType,
+          salaryText: jobForm.salaryText || null,
+          url: jobForm.url || null,
+          fullDescription: jobForm.fullDescription || null
+        })
+      });
+
+      setJobForm(emptyJobForm);
+      setSelectedJob(data.job);
+      await loadJobs();
+      setStatus("Job created");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Job creation failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleArchiveJob = async (id: string) => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      await request<{ job: Job }>(`/jobs/${id}/archive`, {
+        method: "POST"
+      });
+
+      setSelectedJob(null);
+      await loadJobs();
+      setStatus("Job archived");
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : "Archive failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleLogout = async () => {
     setIsBusy(true);
     setError("");
@@ -204,7 +325,10 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
       setUser(null);
       setProfile(null);
+      setJobs([]);
+      setSelectedJob(null);
       setProfileForm(emptyProfileForm);
+      setJobForm(emptyJobForm);
       setStatus("Signed out");
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : "Logout failed");
@@ -220,15 +344,39 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const updateJobField = (field: keyof JobFormState, value: string) => {
+    setJobForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
   return (
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 03</p>
+          <p className="eyebrow">Milestone 04</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
       </header>
+
+      <nav className="tab-row" aria-label="Primary">
+        <button
+          className={activeView === "profile" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveView("profile")}
+        >
+          Candidate Profile
+        </button>
+        <button
+          className={activeView === "jobs" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveView("jobs")}
+        >
+          Job Inbox
+        </button>
+      </nav>
 
       <section className="workspace" aria-live="polite">
         <form className="login-panel" onSubmit={handleLogin}>
@@ -273,97 +421,269 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           {user ? <p className="muted">Signed in as {user.email}</p> : null}
         </form>
 
-        <form className="profile-panel" onSubmit={handleSave}>
-          <div className="section-heading">
-            <h2>Candidate Profile</h2>
-            {profile ? <p className="muted">Updated {new Date(profile.updatedAt).toLocaleString()}</p> : null}
-          </div>
+        {activeView === "profile" ? (
+          <form className="profile-panel" onSubmit={handleProfileSave}>
+            <div className="section-heading">
+              <h2>Candidate Profile</h2>
+              {profile ? (
+                <p className="muted">Updated {new Date(profile.updatedAt).toLocaleString()}</p>
+              ) : null}
+            </div>
 
-          <div className="form-grid">
-            <label>
-              Target roles
-              <textarea
-                value={profileForm.targetRoles}
-                onChange={(event) => updateProfileField("targetRoles", event.target.value)}
-              />
-            </label>
+            <div className="form-grid">
+              <label>
+                Target roles
+                <textarea
+                  value={profileForm.targetRoles}
+                  onChange={(event) => updateProfileField("targetRoles", event.target.value)}
+                />
+              </label>
 
-            <label>
-              Strong skills
-              <textarea
-                value={profileForm.strongSkills}
-                onChange={(event) => updateProfileField("strongSkills", event.target.value)}
-              />
-            </label>
+              <label>
+                Strong skills
+                <textarea
+                  value={profileForm.strongSkills}
+                  onChange={(event) => updateProfileField("strongSkills", event.target.value)}
+                />
+              </label>
 
-            <label>
-              Avoid skills
-              <textarea
-                value={profileForm.avoidSkills}
-                onChange={(event) => updateProfileField("avoidSkills", event.target.value)}
-              />
-            </label>
+              <label>
+                Avoid skills
+                <textarea
+                  value={profileForm.avoidSkills}
+                  onChange={(event) => updateProfileField("avoidSkills", event.target.value)}
+                />
+              </label>
 
-            <label>
-              Preferred locations
-              <textarea
-                value={profileForm.preferredLocations}
-                onChange={(event) => updateProfileField("preferredLocations", event.target.value)}
-              />
-            </label>
+              <label>
+                Preferred locations
+                <textarea
+                  value={profileForm.preferredLocations}
+                  onChange={(event) => updateProfileField("preferredLocations", event.target.value)}
+                />
+              </label>
 
-            <label>
-              Minimum salary EUR
-              <input
-                value={profileForm.minimumSalaryEur}
-                onChange={(event) => updateProfileField("minimumSalaryEur", event.target.value)}
-                inputMode="numeric"
-              />
-            </label>
+              <label>
+                Minimum salary EUR
+                <input
+                  value={profileForm.minimumSalaryEur}
+                  onChange={(event) => updateProfileField("minimumSalaryEur", event.target.value)}
+                  inputMode="numeric"
+                />
+              </label>
 
-            <label>
-              Remote preference
-              <input
-                value={profileForm.remotePreference}
-                onChange={(event) => updateProfileField("remotePreference", event.target.value)}
-              />
-            </label>
+              <label>
+                Remote preference
+                <input
+                  value={profileForm.remotePreference}
+                  onChange={(event) => updateProfileField("remotePreference", event.target.value)}
+                />
+              </label>
 
-            <label>
-              German level
-              <input
-                value={profileForm.germanLevel}
-                onChange={(event) => updateProfileField("germanLevel", event.target.value)}
-              />
-            </label>
+              <label>
+                German level
+                <input
+                  value={profileForm.germanLevel}
+                  onChange={(event) => updateProfileField("germanLevel", event.target.value)}
+                />
+              </label>
 
-            <label>
-              English level
-              <input
-                value={profileForm.englishLevel}
-                onChange={(event) => updateProfileField("englishLevel", event.target.value)}
-              />
-            </label>
+              <label>
+                English level
+                <input
+                  value={profileForm.englishLevel}
+                  onChange={(event) => updateProfileField("englishLevel", event.target.value)}
+                />
+              </label>
 
-            <label className="wide">
-              Profile notes
-              <textarea
-                value={profileForm.profileNotes}
-                onChange={(event) => updateProfileField("profileNotes", event.target.value)}
-                rows={5}
-              />
-            </label>
-          </div>
+              <label className="wide">
+                Profile notes
+                <textarea
+                  value={profileForm.profileNotes}
+                  onChange={(event) => updateProfileField("profileNotes", event.target.value)}
+                  rows={5}
+                />
+              </label>
+            </div>
 
-          <div className="button-row">
-            <button disabled={isBusy || !user} type="submit">
-              Save profile
-            </button>
-            <button disabled={isBusy || !user} type="button" onClick={loadProfile}>
-              Refresh
-            </button>
-          </div>
-        </form>
+            <div className="button-row">
+              <button disabled={isBusy || !user} type="submit">
+                Save profile
+              </button>
+              <button disabled={isBusy || !user} type="button" onClick={loadProfile}>
+                Refresh
+              </button>
+            </div>
+          </form>
+        ) : (
+          <section className="profile-panel">
+            <div className="section-heading">
+              <h2>Job Inbox</h2>
+              <button disabled={isBusy || !user} type="button" onClick={loadJobs}>
+                Refresh
+              </button>
+            </div>
+
+            <form className="job-form" onSubmit={handleJobCreate}>
+              <div className="form-grid">
+                <label>
+                  Company
+                  <input
+                    required
+                    value={jobForm.company}
+                    onChange={(event) => updateJobField("company", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Title
+                  <input
+                    required
+                    value={jobForm.title}
+                    onChange={(event) => updateJobField("title", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Location
+                  <input
+                    value={jobForm.location}
+                    onChange={(event) => updateJobField("location", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Remote type
+                  <select
+                    value={jobForm.remoteType}
+                    onChange={(event) => updateJobField("remoteType", event.target.value)}
+                  >
+                    {remoteTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Salary text
+                  <input
+                    value={jobForm.salaryText}
+                    onChange={(event) => updateJobField("salaryText", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  URL
+                  <input
+                    value={jobForm.url}
+                    onChange={(event) => updateJobField("url", event.target.value)}
+                    type="url"
+                  />
+                </label>
+
+                <label className="wide">
+                  Full description
+                  <textarea
+                    value={jobForm.fullDescription}
+                    onChange={(event) => updateJobField("fullDescription", event.target.value)}
+                    rows={6}
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user} type="submit">
+                  Create job
+                </button>
+              </div>
+            </form>
+
+            <div className="jobs-layout">
+              <section>
+                <h3>Active Jobs</h3>
+                {jobs.length === 0 ? <p className="muted">No active jobs yet.</p> : null}
+                <ul className="job-list">
+                  {jobs.map((job) => (
+                    <li key={job.id}>
+                      <button type="button" onClick={() => void loadJob(job.id)}>
+                        <span>
+                          <strong>{job.title}</strong>
+                          <small>{job.company}</small>
+                        </span>
+                        <span className="badge-row">
+                          <em>{job.status}</em>
+                          <em>{job.sourceQuality}</em>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="job-detail" aria-label="Job detail">
+                {selectedJob ? (
+                  <>
+                    <div className="section-heading">
+                      <div>
+                        <h3>{selectedJob.title}</h3>
+                        <p className="muted">{selectedJob.company}</p>
+                      </div>
+                      <button
+                        disabled={isBusy}
+                        type="button"
+                        onClick={() => void handleArchiveJob(selectedJob.id)}
+                      >
+                        Archive
+                      </button>
+                    </div>
+                    <dl className="detail-list">
+                      <div>
+                        <dt>Status</dt>
+                        <dd>{selectedJob.status}</dd>
+                      </div>
+                      <div>
+                        <dt>Source quality</dt>
+                        <dd>{selectedJob.sourceQuality}</dd>
+                      </div>
+                      <div>
+                        <dt>Location</dt>
+                        <dd>{selectedJob.location ?? "Unknown"}</dd>
+                      </div>
+                      <div>
+                        <dt>Remote</dt>
+                        <dd>{selectedJob.remoteType}</dd>
+                      </div>
+                      <div>
+                        <dt>Salary</dt>
+                        <dd>{selectedJob.salaryText ?? "Not listed"}</dd>
+                      </div>
+                      <div>
+                        <dt>URL</dt>
+                        <dd>
+                          {selectedJob.url ? (
+                            <a href={selectedJob.url} rel="noreferrer" target="_blank">
+                              {selectedJob.url}
+                            </a>
+                          ) : (
+                            "Not listed"
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="description-block">
+                      <h4>Description</h4>
+                      <p>{selectedJob.description?.fullText ?? "No full description saved."}</p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted">Select a job to view details.</p>
+                )}
+              </section>
+            </div>
+          </section>
+        )}
       </section>
 
       {status ? <p className="status success">{status}</p> : null}

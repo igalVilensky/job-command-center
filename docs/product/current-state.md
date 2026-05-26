@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 03 candidate profile settings phase.
+This project is currently in the Milestone 04 job inbox phase.
 
 ## Existing prototype
 
@@ -33,7 +33,7 @@ Milestone 01 project skeleton has been created.
 
 - pnpm workspace and Turbo root configuration exist.
 - `apps/web` Next.js app exists and displays "Job Command Center".
-- `apps/api` Express placeholder exists with `GET /health`.
+- `apps/api` Express app exists with `GET /health`.
 - `apps/ai-service` FastAPI placeholder exists with `GET /health`.
 - Docker Compose Postgres exists with local `jobcc` credentials.
 - `.env.example` exists with safe placeholders.
@@ -55,11 +55,23 @@ Milestone 01 project skeleton has been created.
 - `GET /profile` creates a default profile when missing.
 - Profile updates validate allowed fields and are scoped to the authenticated user.
 - `apps/web` has a minimal demo-login candidate profile editor.
+- Job inbox Prisma models exist:
+  - `JobSource`
+  - `Job`
+  - `JobDescription`
+- Authenticated job routes exist:
+  - `GET /jobs`
+  - `POST /jobs`
+  - `GET /jobs/:id`
+  - `PUT /jobs/:id`
+  - `POST /jobs/:id/archive`
+- Manual job creation creates a manual source and optional description.
+- Job list excludes archived jobs by default.
+- Job reads/writes are scoped to the authenticated user.
+- `apps/web` has a minimal demo-login job inbox and manual job creation form.
 
 Not implemented yet:
 
-- job CRUD
-- job inbox
 - imports
 - application pipeline
 - real AI provider calls
