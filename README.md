@@ -92,7 +92,7 @@ Start Postgres:
 docker compose up -d postgres
 ```
 
-These commands assume local ports `3000`, `4000`, `8000`, and `5432` are free.
+These commands assume local ports `3000`, `4000`, `8000`, and `5433` are free.
 
 Prepare the API database:
 
@@ -173,7 +173,7 @@ The web app loads at `http://localhost:3000`.
 Create `.env` from `.env.example`.
 
 ```bash
-DATABASE_URL="postgresql://jobcc:jobcc@localhost:5432/jobcc_dev"
+DATABASE_URL="postgresql://jobcc:jobcc@localhost:5433/jobcc_dev"
 
 NODE_ENV="development"
 
