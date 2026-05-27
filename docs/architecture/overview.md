@@ -13,6 +13,7 @@ Responsibilities:
 - job inbox UI
 - job detail UI
 - import/paste UI
+- Gmail connection and manual import UI
 - application pipeline UI
 - calls `apps/api`
 - never calls AI providers directly
@@ -57,7 +58,8 @@ Responsibilities:
 - Mock mode must be deterministic enough for tests.
 - Failed AI analysis must never block job creation.
 - Do not add queues until the basic workflow exists.
-- Do not add Gmail OAuth in MVP.
+- Gmail OAuth import must remain explicit and user-triggered.
+- Do not add Gmail background polling in MVP.
 - Do not add scraping.
 - Do not expose secrets to frontend.
 - Do not auto-apply to jobs.

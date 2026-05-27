@@ -88,6 +88,13 @@ succeeded
 failed
 ```
 
+## Email account status
+
+```text
+connected
+disconnected
+```
+
 ## Remote type
 
 ```text

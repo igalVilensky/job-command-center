@@ -37,7 +37,8 @@ Recommended stack:
 - Mock AI must work by default.
 - Failed AI analysis must not block saving jobs.
 - Do not implement auto-apply.
-- Do not implement Gmail OAuth in MVP.
+- Keep Gmail import explicit and user-triggered.
+- Do not implement Gmail background polling in MVP.
 - Do not implement scraping in MVP.
 - Keep MVP simple.
 

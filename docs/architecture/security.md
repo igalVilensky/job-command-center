@@ -13,6 +13,7 @@ Never expose these to frontend:
 - JWT_SECRET
 - AI_SERVICE_TOKEN
 - DATABASE_URL
+- EMAIL_TOKEN_ENCRYPTION_KEY
 
 ## API boundaries
 
@@ -21,6 +22,8 @@ Never expose these to frontend:
 - AI service calls providers.
 - Web never calls AI providers.
 - Web never talks directly to database.
+- Web never receives Gmail OAuth tokens.
+- Gmail tokens are stored encrypted by the API.
 
 ## Human-in-the-loop safety
 

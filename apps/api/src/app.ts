@@ -5,6 +5,7 @@ import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth";
+import { gmailRouter } from "./routes/gmail";
 import { healthRouter } from "./routes/health";
 import { importsRouter } from "./routes/imports";
 import { jobsRouter } from "./routes/jobs";
@@ -25,6 +26,7 @@ app.use("/health", healthRouter);
 app.use("/auth", authRouter);
 app.use("/profile", profileRouter);
 app.use("/ai", aiRouter);
+app.use("/gmail", gmailRouter);
 app.use("/imports", importsRouter);
 app.use("/jobs", jobsRouter);
 
