@@ -313,3 +313,5 @@ Do not commit `.env`.
 - Mobile app.
 - Full CRM complexity.
 - Complex queue infrastructure before the basic workflow is proven.
+
+- Test PR for Make automation.
