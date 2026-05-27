@@ -14,6 +14,7 @@ model User {
   candidateProfile CandidateProfile?
   jobSources       JobSource[]
   jobs             Job[]
+  importedEmails   ImportedEmail[]
   automationRuns   AutomationRun[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -63,6 +64,8 @@ model Job {
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceId          String?
   source            JobSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  importedEmailId   String?
+  importedEmail     ImportedEmail?  @relation(fields: [importedEmailId], references: [id], onDelete: SetNull)
   description       JobDescription?
   aiReviews         AiReview[]
   automationRuns    AutomationRun[]
@@ -94,6 +97,7 @@ model Job {
   @@index([userId, applicationStatus])
   @@index([userId, userDecision])
   @@index([sourceId])
+  @@index([importedEmailId])
 }
 
 model JobDescription {
@@ -106,6 +110,35 @@ model JobDescription {
   language      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model ImportedEmail {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String   @default("gmail")
+  providerMessageId String
+  providerThreadId  String?
+  fromEmail         String?
+  fromName          String?
+  subject           String
+  receivedAt        DateTime?
+  sourceLabel       String?
+  snippet           String?
+  bodyText          String?  @db.Text
+  rawMetadataJson   Json?
+  importStatus      String   @default("imported")
+  extractionStatus  String   @default("not_started")
+  jobCount          Int      @default(0)
+  errorMessage      String?  @db.Text
+  jobs              Job[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, provider, providerMessageId])
+  @@index([userId, receivedAt])
+  @@index([userId, importStatus])
+  @@index([userId, extractionStatus])
 }
 
 model AiReview {

@@ -65,6 +65,26 @@ type Job = {
   latestAiReview: AiReview | null;
 };
 
+type ImportedEmail = {
+  id: string;
+  provider: string;
+  providerMessageId: string;
+  providerThreadId: string | null;
+  fromEmail: string | null;
+  fromName: string | null;
+  subject: string;
+  receivedAt: string | null;
+  sourceLabel: string | null;
+  snippet: string | null;
+  bodyText: string | null;
+  importStatus: string;
+  extractionStatus: string;
+  jobCount: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ProfileFormState = {
   targetRoles: string;
   strongSkills: string;
@@ -93,6 +113,16 @@ type ImportFormState = {
   sourceName: string;
 };
 
+type ImportedEmailFormState = {
+  providerMessageId: string;
+  fromEmail: string;
+  fromName: string;
+  subject: string;
+  receivedAt: string;
+  sourceLabel: string;
+  bodyText: string;
+};
+
 type PipelineFormState = {
   userDecision: string;
   applicationStatus: string;
@@ -101,7 +131,7 @@ type PipelineFormState = {
   followUpDate: string;
 };
 
-type ActiveView = "profile" | "import" | "jobs";
+type ActiveView = "profile" | "import" | "imports" | "jobs";
 
 const emptyProfileForm: ProfileFormState = {
   targetRoles: "",
@@ -129,6 +159,16 @@ const emptyImportForm: ImportFormState = {
   sourceText: "",
   sourceType: "paste",
   sourceName: ""
+};
+
+const emptyImportedEmailForm: ImportedEmailFormState = {
+  providerMessageId: "",
+  fromEmail: "",
+  fromName: "",
+  subject: "",
+  receivedAt: "",
+  sourceLabel: "",
+  bodyText: ""
 };
 
 const emptyPipelineForm: PipelineFormState = {
@@ -197,6 +237,16 @@ const dateToInput = (value: string | null) => (value ? value.slice(0, 10) : "");
 const formatDate = (value: string | null) =>
   value ? new Date(value).toLocaleDateString() : "Not set";
 
+const previewText = (value: string, maxLength = 180) => {
+  const compact = value.replace(/\s+/g, " ").trim();
+
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+
+  return `${compact.slice(0, maxLength - 1)}...`;
+};
+
 const jobToPipelineForm = (job: Job): PipelineFormState => ({
   userDecision: job.userDecision ?? "undecided",
   applicationStatus: job.applicationStatus ?? "not_started",
@@ -229,13 +279,19 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
   const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
   const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
+  const [importedEmailForm, setImportedEmailForm] =
+    useState<ImportedEmailFormState>(emptyImportedEmailForm);
   const [pipelineForm, setPipelineForm] = useState<PipelineFormState>(emptyPipelineForm);
   const [extractedJobs, setExtractedJobs] = useState<Job[]>([]);
+  const [importedEmailExtractedJobs, setImportedEmailExtractedJobs] = useState<Job[]>([]);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [importedEmailWarnings, setImportedEmailWarnings] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [importedEmails, setImportedEmails] = useState<ImportedEmail[]>([]);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedImportedEmail, setSelectedImportedEmail] = useState<ImportedEmail | null>(null);
   const [userDecisionFilter, setUserDecisionFilter] = useState("");
   const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
   const [status, setStatus] = useState("");
@@ -270,6 +326,12 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     return data.jobs;
   };
 
+  const loadImportedEmails = async () => {
+    const data = await request<{ emails: ImportedEmail[] }>("/imports/emails");
+    setImportedEmails(data.emails);
+    return data.emails;
+  };
+
   const loadJob = async (id: string) => {
     const data = await request<{ job: Job }>(`/jobs/${id}`);
     setSelectedJob(data.job);
@@ -280,7 +342,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       try {
         const data = await request<{ user: User }>("/auth/me");
         setUser(data.user);
-        await Promise.all([loadProfile(), loadJobs()]);
+        await Promise.all([loadProfile(), loadJobs(), loadImportedEmails()]);
       } catch {
         setUser(null);
       }
@@ -307,7 +369,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setUser(data.user);
-      await Promise.all([loadProfile(), loadJobs()]);
+      await Promise.all([loadProfile(), loadJobs(), loadImportedEmails()]);
       setStatus("Signed in");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
@@ -419,6 +481,77 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleSimulateImportedEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+    setImportedEmailExtractedJobs([]);
+    setImportedEmailWarnings([]);
+
+    try {
+      const bodyText = importedEmailForm.bodyText.trim();
+      const data = await request<{ email: ImportedEmail; duplicate: boolean }>(
+        "/imports/emails/simulate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            providerMessageId: importedEmailForm.providerMessageId,
+            fromEmail: importedEmailForm.fromEmail || null,
+            fromName: importedEmailForm.fromName || null,
+            subject: importedEmailForm.subject,
+            receivedAt: importedEmailForm.receivedAt
+              ? new Date(importedEmailForm.receivedAt).toISOString()
+              : null,
+            sourceLabel: importedEmailForm.sourceLabel || null,
+            snippet: previewText(bodyText),
+            bodyText
+          })
+        }
+      );
+
+      setSelectedImportedEmail(data.email);
+      if (!data.duplicate) {
+        setImportedEmailForm(emptyImportedEmailForm);
+      }
+      await loadImportedEmails();
+      setStatus(data.duplicate ? "Imported email already exists" : "Imported email saved");
+    } catch (simulateError) {
+      setError(simulateError instanceof Error ? simulateError.message : "Email import failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleExtractImportedEmail = async (id: string) => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+    setImportedEmailWarnings([]);
+
+    try {
+      const data = await request<{ jobs: Job[]; email: ImportedEmail; warnings: string[] }>(
+        `/imports/emails/${id}/extract`,
+        {
+          method: "POST"
+        }
+      );
+
+      setImportedEmailExtractedJobs(data.jobs);
+      setImportedEmailWarnings(data.warnings);
+      setSelectedImportedEmail(data.email);
+      if (data.jobs[0]) {
+        setSelectedJob(data.jobs[0]);
+      }
+      await Promise.all([loadImportedEmails(), loadJobs()]);
+      setStatus(`Extracted ${data.jobs.length} job${data.jobs.length === 1 ? "" : "s"} from email`);
+    } catch (extractError) {
+      setError(extractError instanceof Error ? extractError.message : "Email extraction failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleReviewJob = async (id: string) => {
     setIsBusy(true);
     setError("");
@@ -507,12 +640,17 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setUser(null);
       setProfile(null);
       setJobs([]);
+      setImportedEmails([]);
       setSelectedJob(null);
+      setSelectedImportedEmail(null);
       setExtractedJobs([]);
+      setImportedEmailExtractedJobs([]);
       setImportWarnings([]);
+      setImportedEmailWarnings([]);
       setProfileForm(emptyProfileForm);
       setJobForm(emptyJobForm);
       setImportForm(emptyImportForm);
+      setImportedEmailForm(emptyImportedEmailForm);
       setPipelineForm(emptyPipelineForm);
       setUserDecisionFilter("");
       setApplicationStatusFilter("");
@@ -545,6 +683,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const updateImportedEmailField = (field: keyof ImportedEmailFormState, value: string) => {
+    setImportedEmailForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
   const updatePipelineField = (field: keyof PipelineFormState, value: string) => {
     setPipelineForm((current) => ({
       ...current,
@@ -566,7 +711,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 07</p>
+          <p className="eyebrow">Milestone 08</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
@@ -586,6 +731,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           onClick={() => setActiveView("import")}
         >
           Import/Paste
+        </button>
+        <button
+          className={activeView === "imports" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveView("imports")}
+        >
+          Imports
         </button>
         <button
           className={activeView === "jobs" ? "active" : ""}
@@ -812,6 +964,240 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                   </li>
                 ))}
               </ul>
+            </div>
+          </section>
+        ) : activeView === "imports" ? (
+          <section className="profile-panel">
+            <div className="section-heading">
+              <h2>Imports</h2>
+              <button disabled={isBusy || !user} type="button" onClick={loadImportedEmails}>
+                Refresh
+              </button>
+            </div>
+
+            <form className="job-form" onSubmit={handleSimulateImportedEmail}>
+              <div className="form-grid">
+                <label>
+                  Provider message ID
+                  <input
+                    required
+                    value={importedEmailForm.providerMessageId}
+                    onChange={(event) =>
+                      updateImportedEmailField("providerMessageId", event.target.value)
+                    }
+                  />
+                </label>
+
+                <label>
+                  From email
+                  <input
+                    value={importedEmailForm.fromEmail}
+                    onChange={(event) => updateImportedEmailField("fromEmail", event.target.value)}
+                    type="email"
+                  />
+                </label>
+
+                <label>
+                  From name
+                  <input
+                    value={importedEmailForm.fromName}
+                    onChange={(event) => updateImportedEmailField("fromName", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Received at
+                  <input
+                    value={importedEmailForm.receivedAt}
+                    onChange={(event) => updateImportedEmailField("receivedAt", event.target.value)}
+                    type="datetime-local"
+                  />
+                </label>
+
+                <label>
+                  Subject
+                  <input
+                    required
+                    value={importedEmailForm.subject}
+                    onChange={(event) => updateImportedEmailField("subject", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Label
+                  <input
+                    value={importedEmailForm.sourceLabel}
+                    onChange={(event) => updateImportedEmailField("sourceLabel", event.target.value)}
+                  />
+                </label>
+
+                <label className="wide">
+                  Email body
+                  <textarea
+                    required
+                    value={importedEmailForm.bodyText}
+                    onChange={(event) => updateImportedEmailField("bodyText", event.target.value)}
+                    rows={12}
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button
+                  disabled={
+                    isBusy ||
+                    !user ||
+                    !importedEmailForm.providerMessageId.trim() ||
+                    !importedEmailForm.subject.trim() ||
+                    !importedEmailForm.bodyText.trim()
+                  }
+                  type="submit"
+                >
+                  Simulate import
+                </button>
+              </div>
+            </form>
+
+            <div className="jobs-layout">
+              <section>
+                <h3>Import History</h3>
+                {importedEmails.length === 0 ? (
+                  <p className="muted">No imported emails yet.</p>
+                ) : null}
+                <ul className="job-list">
+                  {importedEmails.map((email) => (
+                    <li key={email.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedImportedEmail(email);
+                          setImportedEmailExtractedJobs([]);
+                          setImportedEmailWarnings([]);
+                        }}
+                      >
+                        <span>
+                          <strong>{email.subject}</strong>
+                          <small>
+                            {email.fromName || email.fromEmail || email.providerMessageId}
+                          </small>
+                        </span>
+                        <span className="badge-row">
+                          <em>{email.importStatus}</em>
+                          <em>{email.extractionStatus}</em>
+                          <em>{email.jobCount} jobs</em>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="job-detail" aria-label="Imported email detail">
+                {selectedImportedEmail ? (
+                  <>
+                    <div className="section-heading">
+                      <div>
+                        <h3>{selectedImportedEmail.subject}</h3>
+                        <p className="muted">
+                          {selectedImportedEmail.fromName || selectedImportedEmail.fromEmail || "Unknown sender"}
+                        </p>
+                      </div>
+                      <button
+                        disabled={isBusy || !user || !selectedImportedEmail.bodyText?.trim()}
+                        type="button"
+                        onClick={() => void handleExtractImportedEmail(selectedImportedEmail.id)}
+                      >
+                        Extract jobs from email
+                      </button>
+                    </div>
+
+                    <dl className="detail-list">
+                      <div>
+                        <dt>Message ID</dt>
+                        <dd>{selectedImportedEmail.providerMessageId}</dd>
+                      </div>
+                      <div>
+                        <dt>Received</dt>
+                        <dd>{formatDate(selectedImportedEmail.receivedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>Label</dt>
+                        <dd>{selectedImportedEmail.sourceLabel ?? "Not set"}</dd>
+                      </div>
+                      <div>
+                        <dt>Import</dt>
+                        <dd>{selectedImportedEmail.importStatus}</dd>
+                      </div>
+                      <div>
+                        <dt>Extraction</dt>
+                        <dd>{selectedImportedEmail.extractionStatus}</dd>
+                      </div>
+                      <div>
+                        <dt>Jobs</dt>
+                        <dd>{selectedImportedEmail.jobCount}</dd>
+                      </div>
+                    </dl>
+
+                    {selectedImportedEmail.errorMessage ? (
+                      <div className="description-block">
+                        <h4>Extraction Error</h4>
+                        <p>{selectedImportedEmail.errorMessage}</p>
+                      </div>
+                    ) : null}
+
+                    <div className="description-block">
+                      <h4>Snippet</h4>
+                      <p>
+                        {selectedImportedEmail.snippet ||
+                          previewText(selectedImportedEmail.bodyText ?? "") ||
+                          "No snippet saved."}
+                      </p>
+                    </div>
+
+                    {importedEmailWarnings.length > 0 ? (
+                      <div className="description-block">
+                        <h4>Warnings</h4>
+                        <ul className="compact-list">
+                          {importedEmailWarnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    <div className="description-block">
+                      <h4>Created Jobs</h4>
+                      {importedEmailExtractedJobs.length === 0 ? (
+                        <p className="muted">No jobs extracted from this email in this session.</p>
+                      ) : null}
+                      <ul className="job-list">
+                        {importedEmailExtractedJobs.map((job) => (
+                          <li key={job.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedJob(job);
+                                setActiveView("jobs");
+                              }}
+                            >
+                              <span>
+                                <strong>{job.title}</strong>
+                                <small>{job.company}</small>
+                              </span>
+                              <span className="badge-row">
+                                <em>{job.status}</em>
+                                <em>{job.sourceQuality}</em>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted">Select an imported email to view details.</p>
+                )}
+              </section>
             </div>
           </section>
         ) : (

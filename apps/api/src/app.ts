@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import { aiRouter } from "./routes/ai";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
+import { importsRouter } from "./routes/imports";
 import { jobsRouter } from "./routes/jobs";
 import { profileRouter } from "./routes/profile";
 
@@ -24,6 +25,7 @@ app.use("/health", healthRouter);
 app.use("/auth", authRouter);
 app.use("/profile", profileRouter);
 app.use("/ai", aiRouter);
+app.use("/imports", importsRouter);
 app.use("/jobs", jobsRouter);
 
 app.use(notFoundHandler);

@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 07 application pipeline phase.
+This project is currently in the Milestone 08 Gmail import foundation phase.
 
 ## Existing prototype
 
@@ -83,8 +83,18 @@ Milestone 01 project skeleton has been created.
 - `appliedAt` and `rejectedAt` are auto-set when application status becomes `applied` or `rejected`.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
 - `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, AI review action, and application pipeline editor.
+- Imported email Prisma models exist for simulated Gmail/job-alert messages.
+- Jobs can optionally reference the imported email that produced them.
+- Authenticated import routes exist:
+  - `GET /imports/emails`
+  - `POST /imports/emails/simulate`
+  - `POST /imports/emails/:id/extract`
+- Simulated imports deduplicate by user, provider, and provider message ID.
+- Imported email listing, simulation, and extraction are scoped to the authenticated user.
+- Imported email extraction reuses the existing API-to-AI-service extraction flow, creates jobs/descriptions, records an automation run, and updates email extraction status/job count.
+- `apps/web` has a simple `Imports` view for simulating an imported email, viewing import history, and extracting jobs from a saved email.
 
 Not implemented yet:
 
 - Gemini/Ollama/OpenAI providers
-- Gmail/OAuth/integrations
+- Real Gmail/OAuth/integrations

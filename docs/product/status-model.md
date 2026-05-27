@@ -74,6 +74,20 @@ manual_note
 unknown
 ```
 
+## Imported email import status
+
+```text
+imported
+```
+
+## Imported email extraction status
+
+```text
+not_started
+succeeded
+failed
+```
+
 ## Remote type
 
 ```text

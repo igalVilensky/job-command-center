@@ -48,6 +48,7 @@ Initial conceptual data model.
 - id
 - user_id
 - source_id
+- imported_email_id nullable
 - external_source_id
 - company
 - title
@@ -63,6 +64,28 @@ Initial conceptual data model.
 - created_at
 - updated_at
 - archived_at
+
+## ImportedEmail
+
+- id
+- user_id
+- provider
+- provider_message_id
+- provider_thread_id
+- from_email
+- from_name
+- subject
+- received_at
+- source_label
+- snippet
+- body_text
+- raw_metadata_json
+- import_status
+- extraction_status
+- job_count
+- error_message
+- created_at
+- updated_at
 
 ## JobDescription
 
