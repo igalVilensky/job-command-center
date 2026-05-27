@@ -87,6 +87,22 @@ Initial conceptual data model.
 - created_at
 - updated_at
 
+## EmailAccount
+
+- id
+- user_id
+- provider
+- email_address
+- display_name
+- access_token_encrypted
+- refresh_token_encrypted
+- token_expires_at
+- scopes
+- status
+- last_sync_at
+- created_at
+- updated_at
+
 ## JobDescription
 
 - id

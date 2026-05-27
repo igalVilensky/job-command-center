@@ -15,6 +15,7 @@ model User {
   jobSources       JobSource[]
   jobs             Job[]
   importedEmails   ImportedEmail[]
+  emailAccounts    EmailAccount[]
   automationRuns   AutomationRun[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -139,6 +140,27 @@ model ImportedEmail {
   @@index([userId, receivedAt])
   @@index([userId, importStatus])
   @@index([userId, extractionStatus])
+}
+
+model EmailAccount {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider              String   @default("gmail")
+  emailAddress          String?
+  displayName           String?
+  accessTokenEncrypted  String?  @db.Text
+  refreshTokenEncrypted String?  @db.Text
+  tokenExpiresAt        DateTime?
+  scopes                String[] @default([])
+  status                String   @default("connected")
+  lastSyncAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([userId, provider, emailAddress])
+  @@index([userId, provider])
+  @@index([status])
 }
 
 model AiReview {

@@ -33,7 +33,7 @@ It is not intended to be a hosted SaaS where the maintainer pays for other peopl
 7. Mock AI provider.
 8. Groq provider.
 9. Automation run logs.
-10. Clear docs for later Gmail, Google Sheets, n8n, Make, and Ollama connectors.
+10. Optional manual Gmail import and clear docs for later Google Sheets, n8n, Make, and Ollama connectors.
 
 ## Tech stack
 
@@ -62,15 +62,15 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, and an optional Groq provider adapter:
+The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, an optional Groq provider adapter, simulated email imports, and manual Gmail OAuth import:
 
-- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, job inbox, and AI review views.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job routes, and authenticated AI orchestration routes.
+- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, Gmail/imports, job inbox, and AI review views.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job/import/Gmail routes, and authenticated AI orchestration routes.
 - `apps/ai-service`: FastAPI service on port 8001 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
-- `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `AiReview`, and `AutomationRun`.
+- `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `ImportedEmail`, `EmailAccount`, `AiReview`, and `AutomationRun`.
 
-Application pipeline, Gemini/Ollama/OpenAI providers, Gmail/OAuth, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+Gemini/Ollama/OpenAI providers, Gmail background polling, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -164,6 +164,31 @@ GROQ_API_URL="https://api.groq.com/openai/v1/chat/completions"
 
 Never commit real API keys.
 
+## Optional Gmail OAuth setup
+
+Manual Gmail import is optional. To use it locally:
+
+1. Create or select a Google Cloud project.
+2. Enable the Gmail API.
+3. Configure the OAuth consent screen for local testing.
+4. Create OAuth client credentials for a web application.
+5. Add this authorized redirect URI:
+
+```text
+http://127.0.0.1:4000/gmail/oauth/callback
+```
+
+Then set these values in your uncommitted `.env` and restart the API:
+
+```bash
+GOOGLE_CLIENT_ID="replace_with_local_client_id"
+GOOGLE_CLIENT_SECRET="replace_with_local_client_secret"
+GOOGLE_OAUTH_REDIRECT_URL="http://127.0.0.1:4000/gmail/oauth/callback"
+EMAIL_TOKEN_ENCRYPTION_KEY="replace_me_with_32_byte_base64_or_long_secret"
+```
+
+Use a strong local `EMAIL_TOKEN_ENCRYPTION_KEY`. A 32-byte base64 value from `openssl rand -base64 32` works well.
+
 Auth checks:
 
 ```bash
@@ -181,6 +206,27 @@ curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/auth/me
 
 curl -i -b /tmp/jobcc-cookies.txt -c /tmp/jobcc-cookies.txt \
   -X POST http://127.0.0.1:4000/auth/logout
+```
+
+Gmail checks:
+
+```bash
+curl -i -c /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@jobcc.local","password":"password123"}' \
+  http://127.0.0.1:4000/auth/login
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/gmail/status
+
+curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/gmail/oauth/start
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"query":"label:jobAlerts newer_than:30d","maxResults":10}' \
+  http://127.0.0.1:4000/gmail/import/recent
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -X POST http://127.0.0.1:4000/gmail/disconnect
 ```
 
 Profile checks:

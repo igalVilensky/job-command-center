@@ -31,6 +31,11 @@ export const env = {
   aiServiceUrl: normalizeString(process.env.AI_SERVICE_URL, "http://127.0.0.1:8001"),
   authCookieName: process.env.AUTH_COOKIE_NAME ?? "jobcc_session",
   databaseUrl: process.env.DATABASE_URL,
+  emailTokenEncryptionKey: process.env.EMAIL_TOKEN_ENCRYPTION_KEY ?? "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleOauthRedirectUrl:
+    process.env.GOOGLE_OAUTH_REDIRECT_URL ?? "http://127.0.0.1:4000/gmail/oauth/callback",
   host: process.env.API_HOST ?? "127.0.0.1",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   jwtSecret:

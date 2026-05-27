@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 08 Gmail import foundation phase.
+This project is currently in the Milestone 09 Gmail OAuth connection and manual Gmail import phase.
 
 ## Existing prototype
 
@@ -93,8 +93,20 @@ Milestone 01 project skeleton has been created.
 - Imported email listing, simulation, and extraction are scoped to the authenticated user.
 - Imported email extraction reuses the existing API-to-AI-service extraction flow, creates jobs/descriptions, records an automation run, and updates email extraction status/job count.
 - `apps/web` has a simple `Imports` view for simulating an imported email, viewing import history, and extracting jobs from a saved email.
+- Email account Prisma models exist for Gmail OAuth connections.
+- Gmail OAuth tokens are stored through an encryption helper backed by `EMAIL_TOKEN_ENCRYPTION_KEY`.
+- Authenticated Gmail routes exist:
+  - `GET /gmail/status`
+  - `GET /gmail/oauth/start`
+  - `POST /gmail/disconnect`
+  - `POST /gmail/import/recent`
+- Gmail OAuth callback exists at:
+  - `GET /gmail/oauth/callback`
+- Gmail status returns safe account info only and never returns tokens.
+- Manual Gmail import uses stored Gmail OAuth credentials to fetch recent messages, deduplicates them into `ImportedEmail`, and does not automatically extract jobs.
+- The `Imports` view includes Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, import history, and explicit email extraction.
 
 Not implemented yet:
 
 - Gemini/Ollama/OpenAI providers
-- Real Gmail/OAuth/integrations
+- Gmail background polling or scheduled imports

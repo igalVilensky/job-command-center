@@ -85,6 +85,21 @@ type ImportedEmail = {
   updatedAt: string;
 };
 
+type GmailStatus = {
+  connected: boolean;
+  emailAddress: string | null;
+  displayName: string | null;
+  status: string;
+  lastSyncAt: string | null;
+};
+
+type GmailImportResult = {
+  imported: number;
+  duplicates: number;
+  emails: ImportedEmail[];
+  query: string;
+};
+
 type ProfileFormState = {
   targetRoles: string;
   strongSkills: string;
@@ -121,6 +136,11 @@ type ImportedEmailFormState = {
   receivedAt: string;
   sourceLabel: string;
   bodyText: string;
+};
+
+type GmailImportFormState = {
+  query: string;
+  maxResults: string;
 };
 
 type PipelineFormState = {
@@ -169,6 +189,11 @@ const emptyImportedEmailForm: ImportedEmailFormState = {
   receivedAt: "",
   sourceLabel: "",
   bodyText: ""
+};
+
+const defaultGmailImportForm: GmailImportFormState = {
+  query: "label:jobAlerts newer_than:30d",
+  maxResults: "10"
 };
 
 const emptyPipelineForm: PipelineFormState = {
@@ -281,6 +306,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
   const [importedEmailForm, setImportedEmailForm] =
     useState<ImportedEmailFormState>(emptyImportedEmailForm);
+  const [gmailImportForm, setGmailImportForm] =
+    useState<GmailImportFormState>(defaultGmailImportForm);
   const [pipelineForm, setPipelineForm] = useState<PipelineFormState>(emptyPipelineForm);
   const [extractedJobs, setExtractedJobs] = useState<Job[]>([]);
   const [importedEmailExtractedJobs, setImportedEmailExtractedJobs] = useState<Job[]>([]);
@@ -290,6 +317,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [importedEmails, setImportedEmails] = useState<ImportedEmail[]>([]);
+  const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
+  const [gmailImportResult, setGmailImportResult] = useState<GmailImportResult | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedImportedEmail, setSelectedImportedEmail] = useState<ImportedEmail | null>(null);
   const [userDecisionFilter, setUserDecisionFilter] = useState("");
@@ -332,6 +361,12 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     return data.emails;
   };
 
+  const loadGmailStatus = async () => {
+    const data = await request<GmailStatus>("/gmail/status");
+    setGmailStatus(data);
+    return data;
+  };
+
   const loadJob = async (id: string) => {
     const data = await request<{ job: Job }>(`/jobs/${id}`);
     setSelectedJob(data.job);
@@ -342,13 +377,34 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       try {
         const data = await request<{ user: User }>("/auth/me");
         setUser(data.user);
-        await Promise.all([loadProfile(), loadJobs(), loadImportedEmails()]);
+        await Promise.all([loadProfile(), loadJobs(), loadImportedEmails(), loadGmailStatus()]);
       } catch {
         setUser(null);
       }
     };
 
     void loadSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmail = params.get("gmail");
+
+    if (!gmail) {
+      return;
+    }
+
+    setActiveView("imports");
+
+    if (gmail === "connected") {
+      setStatus("Gmail connected");
+      void loadGmailStatus();
+    } else {
+      setError("Gmail connection failed");
+    }
+
+    window.history.replaceState({}, "", window.location.pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -369,7 +425,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setUser(data.user);
-      await Promise.all([loadProfile(), loadJobs(), loadImportedEmails()]);
+      await Promise.all([loadProfile(), loadJobs(), loadImportedEmails(), loadGmailStatus()]);
       setStatus("Signed in");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
@@ -523,6 +579,78 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleStartGmailOAuth = async () => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ authUrl: string }>("/gmail/oauth/start");
+      window.location.href = data.authUrl;
+    } catch (startError) {
+      setError(startError instanceof Error ? startError.message : "Gmail connection failed");
+      setIsBusy(false);
+    }
+  };
+
+  const handleDisconnectGmail = async () => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+    setGmailImportResult(null);
+
+    try {
+      await request<{ ok: boolean }>("/gmail/disconnect", {
+        method: "POST"
+      });
+      await loadGmailStatus();
+      setStatus("Gmail disconnected");
+    } catch (disconnectError) {
+      setError(disconnectError instanceof Error ? disconnectError.message : "Gmail disconnect failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleImportFromGmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+    setGmailImportResult(null);
+    setImportedEmailExtractedJobs([]);
+    setImportedEmailWarnings([]);
+
+    const maxResults = Number(gmailImportForm.maxResults);
+
+    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 25) {
+      setError("Max results must be an integer between 1 and 25");
+      setIsBusy(false);
+      return;
+    }
+
+    try {
+      const data = await request<GmailImportResult>("/gmail/import/recent", {
+        method: "POST",
+        body: JSON.stringify({
+          query: gmailImportForm.query || null,
+          maxResults
+        })
+      });
+
+      setGmailImportResult(data);
+      if (data.emails[0]) {
+        setSelectedImportedEmail(data.emails[0]);
+      }
+      await Promise.all([loadImportedEmails(), loadGmailStatus()]);
+      setStatus(`Gmail import complete: ${data.imported} new, ${data.duplicates} duplicate`);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Gmail import failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleExtractImportedEmail = async (id: string) => {
     setIsBusy(true);
     setError("");
@@ -641,6 +769,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setProfile(null);
       setJobs([]);
       setImportedEmails([]);
+      setGmailStatus(null);
+      setGmailImportResult(null);
       setSelectedJob(null);
       setSelectedImportedEmail(null);
       setExtractedJobs([]);
@@ -651,6 +781,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setJobForm(emptyJobForm);
       setImportForm(emptyImportForm);
       setImportedEmailForm(emptyImportedEmailForm);
+      setGmailImportForm(defaultGmailImportForm);
       setPipelineForm(emptyPipelineForm);
       setUserDecisionFilter("");
       setApplicationStatusFilter("");
@@ -690,6 +821,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const updateGmailImportField = (field: keyof GmailImportFormState, value: string) => {
+    setGmailImportForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
   const updatePipelineField = (field: keyof PipelineFormState, value: string) => {
     setPipelineForm((current) => ({
       ...current,
@@ -711,7 +849,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 08</p>
+          <p className="eyebrow">Milestone 09</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
@@ -975,7 +1113,99 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               </button>
             </div>
 
+            <section className="description-block">
+              <div className="section-heading">
+                <h3>Gmail Connection</h3>
+                <span className="badge-row">
+                  <em>{gmailStatus?.connected ? "connected" : "disconnected"}</em>
+                </span>
+              </div>
+
+              <dl className="detail-list">
+                <div>
+                  <dt>Account</dt>
+                  <dd>{gmailStatus?.emailAddress ?? "Not connected"}</dd>
+                </div>
+                <div>
+                  <dt>Name</dt>
+                  <dd>{gmailStatus?.displayName ?? "Not set"}</dd>
+                </div>
+                <div>
+                  <dt>Last import</dt>
+                  <dd>{formatDate(gmailStatus?.lastSyncAt ?? null)}</dd>
+                </div>
+              </dl>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user} type="button" onClick={handleStartGmailOAuth}>
+                  Connect Gmail
+                </button>
+                <button
+                  disabled={isBusy || !user || !gmailStatus?.connected}
+                  type="button"
+                  onClick={handleDisconnectGmail}
+                >
+                  Disconnect
+                </button>
+              </div>
+            </section>
+
+            <form className="job-form" onSubmit={handleImportFromGmail}>
+              <div className="section-heading">
+                <h3>Gmail Import</h3>
+              </div>
+
+              <div className="form-grid">
+                <label>
+                  Gmail query
+                  <input
+                    value={gmailImportForm.query}
+                    onChange={(event) => updateGmailImportField("query", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Max results
+                  <input
+                    value={gmailImportForm.maxResults}
+                    onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user || !gmailStatus?.connected} type="submit">
+                  Import from Gmail
+                </button>
+              </div>
+            </form>
+
+            {gmailImportResult ? (
+              <div className="description-block">
+                <h3>Gmail Import Result</h3>
+                <dl className="detail-list">
+                  <div>
+                    <dt>Imported</dt>
+                    <dd>{gmailImportResult.imported}</dd>
+                  </div>
+                  <div>
+                    <dt>Duplicates</dt>
+                    <dd>{gmailImportResult.duplicates}</dd>
+                  </div>
+                  <div>
+                    <dt>Query</dt>
+                    <dd>{gmailImportResult.query}</dd>
+                  </div>
+                </dl>
+              </div>
+            ) : null}
+
             <form className="job-form" onSubmit={handleSimulateImportedEmail}>
+              <div className="section-heading">
+                <h3>Simulated Email Import</h3>
+              </div>
+
               <div className="form-grid">
                 <label>
                   Provider message ID

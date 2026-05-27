@@ -20,7 +20,7 @@ candidate profile -> job import -> AI review -> human decision -> application pi
 
 ## MVP should not include
 
-- Gmail OAuth.
+- Gmail background polling.
 - Calendar integration.
 - Browser extension.
 - Job board scraping.
