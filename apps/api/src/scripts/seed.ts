@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { type CandidateProfile, PrismaClient } from "@prisma/client";
 import { parseCandidateCvSource } from "../lib/cv-profile";
 import { hashPassword } from "../lib/password";
 
@@ -50,6 +50,43 @@ Experience highlights:
 - ARI Motors: full-stack functionality, performance, SEO, responsive UX.
 - WBS: AI Agents & Automations training.
 `.trim();
+
+const OLD_DEMO_PROFILE_NOTES = "Prefers product engineering roles.";
+
+const normalizedList = (items: string[]) => items.map((item) => item.trim().toLowerCase()).sort();
+
+const listMatches = (actual: string[], expected: string[]) => {
+  const actualItems = normalizedList(actual);
+  const expectedItems = normalizedList(expected);
+
+  return actualItems.length === expectedItems.length && actualItems.every((item, index) => item === expectedItems[index]);
+};
+
+const isBlank = (value: string | null) => !value?.trim();
+
+const isOldDemoProfile = (profile: CandidateProfile) =>
+  listMatches(profile.targetRoles, ["Backend Engineer"]) &&
+  listMatches(profile.strongSkills, ["TypeScript", "Node.js"]) &&
+  listMatches(profile.preferredLocations, ["Berlin", "Remote"]) &&
+  listMatches(profile.avoidSkills, ["Cold calling"]) &&
+  profile.minimumSalaryEur === 70000 &&
+  profile.germanLevel === "B1" &&
+  profile.englishLevel === "C1" &&
+  profile.remotePreference === "hybrid" &&
+  profile.profileNotes === OLD_DEMO_PROFILE_NOTES &&
+  isBlank(profile.profession) &&
+  isBlank(profile.bio) &&
+  profile.secondarySkills.length === 0 &&
+  profile.engineeringSkills.length === 0 &&
+  profile.aiSkills.length === 0 &&
+  profile.mixedSkills.length === 0 &&
+  profile.industryPreferences.length === 0 &&
+  profile.industryAvoid.length === 0 &&
+  isBlank(profile.experienceSummary) &&
+  isBlank(profile.seniorityNotes) &&
+  profile.languagesJson === null &&
+  profile.profileSourceId === null &&
+  profile.availabilityDate === null;
 
 async function main() {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
@@ -113,6 +150,7 @@ async function main() {
     profileNotes: parsedProfile.profileNotes,
     profileSourceId: cv.id
   };
+  let profileSeedResult: string;
 
   if (!existingProfile) {
     await prisma.candidateProfile.create({
@@ -121,14 +159,37 @@ async function main() {
         ...profileData
       }
     });
+    profileSeedResult = "Demo profile created from CV source.";
   } else if (profileIsEmpty) {
     await prisma.candidateProfile.update({
       where: { userId: user.id },
       data: profileData
     });
+    profileSeedResult = "Demo profile was empty; seed updated it from CV source.";
+  } else if (isOldDemoProfile(existingProfile)) {
+    await prisma.candidateProfile.update({
+      where: { userId: user.id },
+      data: {
+        ...profileData,
+        avoidSkills: [],
+        mixedSkills: [],
+        minimumSalaryEur: null,
+        remotePreference: null,
+        seniorityNotes: null,
+        industryPreferences: [],
+        industryAvoid: [],
+        availabilityDate: null
+      }
+    });
+    profileSeedResult =
+      "Demo profile matched old local demo defaults; seed repaired it from CV source and cleared stale manual-only defaults.";
+  } else {
+    profileSeedResult =
+      "Demo profile already has data; seed did not overwrite it. Use Save CV and update profile from CV in the UI to refresh structured fields.";
   }
 
   console.log(`Seeded demo user: ${user.email}`);
+  console.log(profileSeedResult);
 }
 
 main()

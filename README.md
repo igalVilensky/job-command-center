@@ -102,6 +102,8 @@ pnpm --filter @jobcc/api db:migrate
 pnpm --filter @jobcc/api db:seed
 ```
 
+The seed is idempotent for local development. It creates the demo user and demo CV source, creates a missing profile, updates an empty profile from the CV source, repairs the exact old local demo defaults, and skips any non-empty user-edited profile with a clear terminal message. To refresh structured CV-backed fields later, use **Save CV and update profile from CV** in the web UI.
+
 Run the web app:
 
 ```bash
@@ -231,6 +233,8 @@ curl -i -b /tmp/jobcc-cookies.txt \
 
 Profile checks:
 
+`POST /profile/cv` saves Typst/plain CV source and refreshes parsed CV-backed fields such as profession, bio, target roles, skills, language levels, experience summary, and CV-detected locations. It does not infer salary expectations, avoid skills, or remote preference; edit those manually through `PUT /profile` or the profile form after CV extraction.
+
 ```bash
 curl -i -c /tmp/jobcc-cookies.txt \
   -H "Content-Type: application/json" \
@@ -238,6 +242,11 @@ curl -i -c /tmp/jobcc-cookies.txt \
   http://127.0.0.1:4000/auth/login
 
 curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/profile
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"sourceType":"typst","sourceName":"Local CV","sourceText":"Profession:\nFull-Stack Software Developer\n\nLanguages:\nEnglish C1\nGerman B2\n\nExperience highlights:\nBuilt TypeScript, React, Vue, Node.js, and AI product features in Leipzig, Germany."}' \
+  http://127.0.0.1:4000/profile/cv
 
 curl -i -b /tmp/jobcc-cookies.txt \
   -H "Content-Type: application/json" \

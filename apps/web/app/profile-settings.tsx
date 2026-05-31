@@ -1166,8 +1166,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                 ) : null}
               </div>
               <p className="muted">
-                The CV source is the reference. The structured profile below is what AI review uses.
-                You can edit it after extraction.
+                Save CV and update profile from CV refreshes parsed CV-backed fields like
+                profession, bio, roles, skills, languages, experience, and CV-detected locations.
+                Salary expectations, avoid skills, and remote preference stay manual.
               </p>
               <div className="form-grid">
                 <label>

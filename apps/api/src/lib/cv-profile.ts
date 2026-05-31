@@ -56,6 +56,8 @@ const AI_TERMS = [
   "AI Product Features"
 ];
 
+const LOCATION_TERMS = ["Leipzig", "Germany"];
+
 const HEADING_ALIASES: Record<string, string[]> = {
   profession: ["profession", "role", "title"],
   bio: ["bio", "summary", "profile"],
@@ -190,6 +192,9 @@ const languageLevels = (sourceText: string, explicitLines: string[]) => {
 const firstSectionLine = (sections: Map<string, string[]>, key: string) =>
   compact(sections.get(key)?.join(" ") ?? "") || null;
 
+const locationsInText = (sourceText: string) =>
+  LOCATION_TERMS.filter((location) => new RegExp(`\\b${location}\\b`, "i").test(sourceText));
+
 export const parseCandidateCvSource = (sourceText: string): ParsedCandidateProfile => {
   const sections = sectionMap(sourceText);
   const source = cleanTypstMarkup(sourceText);
@@ -228,7 +233,7 @@ export const parseCandidateCvSource = (sourceText: string): ParsedCandidateProfi
     secondarySkills,
     engineeringSkills,
     aiSkills,
-    preferredLocations: [],
+    preferredLocations: unique(locationsInText(source)),
     germanLevel: languagesJson.German ?? null,
     englishLevel: languagesJson.English ?? null,
     languagesJson,

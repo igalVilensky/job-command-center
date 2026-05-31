@@ -43,6 +43,7 @@ Milestone 01 project skeleton has been created.
 - Initial Prisma models exist for `User` and `CandidateProfile`.
 - Initial migration exists for the auth foundation.
 - Seed script creates local demo user `demo@jobcc.local`.
+- Seed script creates the demo CV source, creates or fills an empty demo profile from the CV source, repairs the exact old local demo profile defaults, and logs clearly when an existing non-empty profile is skipped instead of overwritten.
 - Basic email/password auth routes exist:
   - `POST /auth/register`
   - `POST /auth/login`
@@ -58,6 +59,7 @@ Milestone 01 project skeleton has been created.
 - Candidate profiles include richer editable CV-backed fields such as profession, bio, secondary/engineering/AI skills, languages JSON, and experience summary.
 - Candidate CV source records can be stored as active `CandidateCv` rows through authenticated `/profile/cv` routes.
 - `POST /profile/cv` stores Typst/plain CV source, performs lightweight deterministic profile extraction, updates the editable structured profile, and returns the active CV.
+- CV extraction updates parsed CV-backed fields such as profession, bio, roles, skills, language levels, experience summary, and CV-detected locations. Salary expectations, avoid skills, and remote preference are not inferred from CV source and remain manual profile fields.
 - AI job review receives the richer structured profile and active CV context instead of relying only on shallow seed skills.
 - Review prompting treats React/Next, Vue/Nuxt, TypeScript/JavaScript, Node/Express, REST APIs, and SaaS/product work as related JS/TS ecosystem skills when the profile supports that.
 - `apps/web` has a minimal demo-login candidate profile editor.
