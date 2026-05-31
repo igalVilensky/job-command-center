@@ -4,6 +4,14 @@
 
 Allow an authenticated user to connect Gmail using OAuth, then manually fetch recent job-alert emails and save them as `ImportedEmail` records. The existing explicit extraction flow remains separate.
 
+## Post-Milestone Bugfix Note
+
+Imported email extraction now prepares generic cleaned source text before sending it to the LLM. The cleanup is provider-agnostic and removes common email noise such as long/tracking URLs, invisible padding, repeated CTAs, social links, unsubscribe blocks, and footer/legal boilerplate while preserving visible job-alert content.
+
+The LLM remains responsible for semantic job extraction; this is not a StepStone-specific parser and does not add provider-specific extraction rules. Valid zero-job extraction results are allowed, duplicate jobs from the same imported email are skipped by normalized company/title, and the web app surfaces safe backend error details for extraction failures.
+
+The follow-up profile/review fix adds active CV source storage, lightweight CV-to-profile extraction, richer editable candidate profile fields, and AI review context that uses the structured profile plus CV context. Imports UI copy now distinguishes imported emails from extracted jobs and makes processed email status clearer.
+
 ## Scope
 
 - Add a user-owned `EmailAccount` model for Gmail OAuth connections.

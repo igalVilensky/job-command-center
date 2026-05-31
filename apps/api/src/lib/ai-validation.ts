@@ -192,10 +192,6 @@ export const validateExtractionResponse = (body: unknown): AiExtractionResponse 
     throw new Error("AI response jobs must be an array");
   }
 
-  if (body.jobs.length === 0) {
-    throw new Error("AI response must include at least one job");
-  }
-
   const jobs = body.jobs.map((job, index) => {
     if (!isPlainObject(job)) {
       throw new Error(`AI response jobs[${index}] must be an object`);

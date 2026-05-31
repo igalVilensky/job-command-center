@@ -204,26 +204,36 @@ def _normalize_extraction(payload: dict[str, Any]) -> dict[str, object]:
     source_kind = _enum(_required(payload, "sourceKind", "extraction"), "extraction.sourceKind", SOURCE_KINDS)
     jobs_value = _required(payload, "jobs", "extraction")
 
-    if not isinstance(jobs_value, list) or not jobs_value:
-        raise ProviderError("extraction.jobs must be a non-empty array", 502)
+    if not isinstance(jobs_value, list):
+        raise ProviderError("extraction.jobs must be an array", 502)
 
+    warnings = _string_array(_required(payload, "warnings", "extraction"), "extraction.warnings")
     jobs = []
     for index, raw_job in enumerate(jobs_value):
         label = f"extraction.jobs[{index}]"
         job = _object(raw_job, label)
+        company = _string(_required(job, "company", label), f"{label}.company")
+        title = _string(_required(job, "title", label), f"{label}.title")
+
+        if not company or not title:
+            missing_fields = []
+            if not company:
+                missing_fields.append("company")
+            if not title:
+                missing_fields.append("title")
+            warnings.append(f"Skipped {label} because missing {', '.join(missing_fields)}.")
+            continue
+
         salary_min = _nullable_int(_required(job, "salaryMinEur", label), f"{label}.salaryMinEur")
         salary_max = _nullable_int(_required(job, "salaryMaxEur", label), f"{label}.salaryMaxEur")
 
         if salary_min is not None and salary_max is not None and salary_min > salary_max:
             raise ProviderError(f"{label} has salaryMinEur greater than salaryMaxEur", 502)
 
-        company = _string(_required(job, "company", label), f"{label}.company")
-        title = _string(_required(job, "title", label), f"{label}.title")
-
         jobs.append(
             {
-                "company": company or f"Unknown company {index + 1}",
-                "title": title or "Unknown job opportunity",
+                "company": company,
+                "title": title,
                 "location": _string(_required(job, "location", label), f"{label}.location"),
                 "remoteType": _enum(_required(job, "remoteType", label), f"{label}.remoteType", REMOTE_TYPES),
                 "salaryText": _string(_required(job, "salaryText", label), f"{label}.salaryText"),
@@ -247,7 +257,7 @@ def _normalize_extraction(payload: dict[str, Any]) -> dict[str, object]:
     return {
         "sourceKind": source_kind,
         "jobs": jobs,
-        "warnings": _string_array(_required(payload, "warnings", "extraction"), "extraction.warnings"),
+        "warnings": warnings,
     }
 
 
@@ -394,13 +404,24 @@ Allowed sourceKind values: single_job, multi_job_digest, recruiter_message, not_
 Allowed remoteType values: remote, remote_first, hybrid, homeoffice_possible, onsite, unknown.
 Allowed sourceQuality values: full_description, digest_summary, email_summary, unknown.
 Allowed confidence values: high, medium, low.
+The jobs array may be empty when no confident job is present.
 
 Rules:
+- Extract only jobs explicitly present in the provided source text.
+- Never use prior context, memory, or previously seen jobs.
 - Return all real job opportunities from the source.
+- Return jobs: [] with a warning if no confident job can be found.
 - Use empty strings for unknown text fields.
 - Use null for unknown salaryMinEur and salaryMaxEur.
-- Do not invent salary, remote policy, company, location, or language requirements.
-- Do not treat badges such as "Passt hervorragend" or "Beliebter Job" as company names.
+- Never invent company, title, location, salary, remote policy, or language requirements.
+- If company or title cannot be confidently found for a candidate job, skip that job.
+- Ignore generic email noise: tracking URLs, social links, unsubscribe links, headers, footers, legal boilerplate, repeated CTA buttons, and link-only lines.
+- A job alert email may contain one highlighted job or multiple jobs; return only the real jobs clearly present.
+- Do not create multiple jobs from repeated buttons, links, footer content, or repeated snippets.
+- If a title is visibly truncated with "...", keep the visible title and add a warning.
+- Treat alert/digest snippets as digest_summary or email_summary, not full_description, unless a real full description is present.
+- Do not treat generic marketing phrases, sender names, CTA labels, badge labels, or section headers as company/title.
+- Prefer explicit nearby job-card fields over footer or link text.
 - If text has only a teaser, set sourceQuality to digest_summary or email_summary and needsFullDescription to true.
 - If text contains a full job description, set sourceQuality to full_description and needsFullDescription to false.
 - Extraction is not review; do not score candidate fit.
@@ -477,6 +498,19 @@ Rules:
 - Do not treat location as blocker if remote-first or fully remote is clear.
 - Penalize explicit C1/native German if the candidate has a lower German level.
 - Treat short digest summaries as incomplete.
+- Treat the candidate as full-stack JS/TS when profile fields or CV context say so.
+- React, Next.js, Vue, Nuxt, TypeScript, JavaScript, Node.js, Express, REST APIs, SaaS/product work, and web application delivery are related skills.
+- Do not skip React/frontend jobs merely because Node.js is not central.
+- Do not skip Vue/Nuxt jobs merely because React is not central.
+- Do not skip TypeScript/frontend roles merely because backend is not central.
+- For frontend-heavy roles, score based on frontend stack match, TypeScript/JavaScript match, product/SaaS relevance, salary, location, remote, German level, and seniority.
+- Backend-only non-JS stacks such as Java-only, PHP-only, or C#-only may be lower fit unless TypeScript/React/Vue/Node or relevant web/product skills are also present.
+- If a role includes React, Vue, Nuxt, Next, TypeScript, JavaScript, Node, REST APIs, SaaS/product, or web apps, it should usually be at least maybe unless there are major blockers.
+- Candidate German level must come from the profile; do not assume C1/native if the profile says B2.
+- Candidate is full-stack and has strong frontend experience when the profile says so.
+- Treat Homeoffice möglich as a clarification point, not an automatic skip.
+- If source is a short email/digest summary, recommend getting the full description instead of a harsh skip.
+- Skip only for serious blockers: explicit C1/native German above profile level, mandatory on-site/relocation far from preferred locations, clearly unrelated stack, salary clearly below minimum, or seniority mismatch.
 - AI review is advisory; the user decides.
 
 Input:

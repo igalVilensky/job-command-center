@@ -7,6 +7,7 @@ Initial conceptual data model.
 - id
 - email
 - password_hash
+- candidate_cvs
 - created_at
 - updated_at
 
@@ -14,9 +15,13 @@ Initial conceptual data model.
 
 - id
 - user_id
+- profession
+- bio
 - target_roles
 - strong_skills
 - secondary_skills
+- engineering_skills
+- ai_skills
 - avoid_skills
 - mixed_skills
 - minimum_salary_eur
@@ -24,11 +29,26 @@ Initial conceptual data model.
 - remote_preference
 - german_level
 - english_level
+- languages_json
+- experience_summary
+- profile_source_id
 - seniority_notes
 - industry_preferences
 - industry_avoid
 - availability_date
 - profile_notes
+- created_at
+- updated_at
+
+## CandidateCv
+
+- id
+- user_id
+- source_type
+- source_name
+- source_text
+- parsed_profile_json
+- is_active
 - created_at
 - updated_at
 

@@ -9,16 +9,38 @@ type User = {
 
 type Profile = {
   id: string;
+  profession: string | null;
+  bio: string | null;
   targetRoles: string[];
   strongSkills: string[];
+  secondarySkills: string[];
+  engineeringSkills: string[];
+  aiSkills: string[];
   avoidSkills: string[];
   minimumSalaryEur: number | null;
   preferredLocations: string[];
   remotePreference: string | null;
   germanLevel: string | null;
   englishLevel: string | null;
+  languagesJson: Record<string, string> | null;
+  experienceSummary: string | null;
   profileNotes: string | null;
   updatedAt: string;
+  activeCv: CandidateCvMetadata | null;
+};
+
+type CandidateCvMetadata = {
+  id: string;
+  sourceType: string;
+  sourceName: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CandidateCv = CandidateCvMetadata & {
+  sourceText: string;
+  parsedProfileJson: unknown;
 };
 
 type JobDescription = {
@@ -101,15 +123,28 @@ type GmailImportResult = {
 };
 
 type ProfileFormState = {
+  profession: string;
+  bio: string;
   targetRoles: string;
   strongSkills: string;
+  secondarySkills: string;
+  engineeringSkills: string;
+  aiSkills: string;
   avoidSkills: string;
   minimumSalaryEur: string;
   preferredLocations: string;
   remotePreference: string;
   germanLevel: string;
   englishLevel: string;
+  languages: string;
+  experienceSummary: string;
   profileNotes: string;
+};
+
+type CvFormState = {
+  sourceType: string;
+  sourceName: string;
+  sourceText: string;
 };
 
 type JobFormState = {
@@ -154,15 +189,28 @@ type PipelineFormState = {
 type ActiveView = "profile" | "import" | "imports" | "jobs";
 
 const emptyProfileForm: ProfileFormState = {
+  profession: "",
+  bio: "",
   targetRoles: "",
   strongSkills: "",
+  secondarySkills: "",
+  engineeringSkills: "",
+  aiSkills: "",
   avoidSkills: "",
   minimumSalaryEur: "",
   preferredLocations: "",
   remotePreference: "",
   germanLevel: "",
   englishLevel: "",
+  languages: "",
+  experienceSummary: "",
   profileNotes: ""
+};
+
+const emptyCvForm: CvFormState = {
+  sourceType: "typst",
+  sourceName: "",
+  sourceText: ""
 };
 
 const emptyJobForm: JobFormState = {
@@ -245,16 +293,52 @@ const textToList = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const languagesToText = (value: Record<string, string> | null) =>
+  value
+    ? Object.entries(value)
+        .map(([language, level]) => `${language}: ${level}`)
+        .join("\n")
+    : "";
+
+const textToLanguages = (value: string) => {
+  const entries = value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [language, ...rest] = item.split(/:|-/);
+      return [language?.trim(), rest.join("-").trim()] as const;
+    })
+    .filter(([language, level]) => language && level);
+
+  return entries.length > 0
+    ? Object.fromEntries(entries.map(([language, level]) => [language, level]))
+    : null;
+};
+
 const profileToForm = (profile: Profile): ProfileFormState => ({
+  profession: profile.profession ?? "",
+  bio: profile.bio ?? "",
   targetRoles: listToText(profile.targetRoles),
   strongSkills: listToText(profile.strongSkills),
+  secondarySkills: listToText(profile.secondarySkills),
+  engineeringSkills: listToText(profile.engineeringSkills),
+  aiSkills: listToText(profile.aiSkills),
   avoidSkills: listToText(profile.avoidSkills),
   minimumSalaryEur: profile.minimumSalaryEur ? String(profile.minimumSalaryEur) : "",
   preferredLocations: listToText(profile.preferredLocations),
   remotePreference: profile.remotePreference ?? "",
   germanLevel: profile.germanLevel ?? "",
   englishLevel: profile.englishLevel ?? "",
+  languages: languagesToText(profile.languagesJson),
+  experienceSummary: profile.experienceSummary ?? "",
   profileNotes: profile.profileNotes ?? ""
+});
+
+const cvToForm = (cv: CandidateCv | null): CvFormState => ({
+  sourceType: cv?.sourceType ?? "typst",
+  sourceName: cv?.sourceName ?? "",
+  sourceText: cv?.sourceText ?? ""
 });
 
 const dateToInput = (value: string | null) => (value ? value.slice(0, 10) : "");
@@ -272,6 +356,54 @@ const previewText = (value: string, maxLength = 180) => {
   return `${compact.slice(0, maxLength - 1)}...`;
 };
 
+const extractedJobsStatus = (email: ImportedEmail) => {
+  if (email.extractionStatus === "failed") {
+    return "Failed";
+  }
+
+  if (email.extractionStatus === "not_started") {
+    return "Not extracted yet";
+  }
+
+  if (email.extractionStatus === "succeeded") {
+    return `Extracted ${email.jobCount} job${email.jobCount === 1 ? "" : "s"}`;
+  }
+
+  return email.extractionStatus;
+};
+
+const selectedEmailJobCountText = (email: ImportedEmail) => {
+  if (email.extractionStatus === "not_started") {
+    return "Not extracted yet";
+  }
+
+  if (email.extractionStatus === "failed") {
+    return "Failed";
+  }
+
+  return String(email.jobCount);
+};
+
+const selectedEmailEmptyJobsMessage = (email: ImportedEmail) => {
+  if (email.extractionStatus === "not_started") {
+    return "No jobs extracted yet.";
+  }
+
+  if (email.extractionStatus === "succeeded" && email.jobCount > 0) {
+    return "Jobs were previously extracted from this email. Open Job Inbox to view them.";
+  }
+
+  if (email.extractionStatus === "succeeded") {
+    return "Extraction completed, but no jobs were found.";
+  }
+
+  if (email.extractionStatus === "failed") {
+    return `Extraction failed${email.errorMessage ? `: ${email.errorMessage}` : "."}`;
+  }
+
+  return "No jobs extracted from this email in this session.";
+};
+
 const jobToPipelineForm = (job: Job): PipelineFormState => ({
   userDecision: job.userDecision ?? "undecided",
   applicationStatus: job.applicationStatus ?? "not_started",
@@ -284,12 +416,14 @@ const parseResponse = async <T,>(response: Response): Promise<T> => {
   const body = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
+    const errorBody =
       body && typeof body === "object" && "error" in body
-        ? (body as { error?: { message?: string } }).error?.message
+        ? (body as { error?: { message?: unknown; detail?: unknown } }).error
         : undefined;
+    const message = typeof errorBody?.message === "string" ? errorBody.message : undefined;
+    const detail = typeof errorBody?.detail === "string" ? errorBody.detail : undefined;
 
-    throw new Error(message ?? `Request failed with ${response.status}`);
+    throw new Error(detail ?? message ?? `Request failed with ${response.status}`);
   }
 
   return body as T;
@@ -302,6 +436,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     password: "password123"
   });
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
+  const [cvForm, setCvForm] = useState<CvFormState>(emptyCvForm);
   const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
   const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
   const [importedEmailForm, setImportedEmailForm] =
@@ -315,6 +450,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [importedEmailWarnings, setImportedEmailWarnings] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [activeCv, setActiveCv] = useState<CandidateCv | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [importedEmails, setImportedEmails] = useState<ImportedEmail[]>([]);
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
@@ -349,6 +485,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setProfileForm(profileToForm(data.profile));
   };
 
+  const loadCandidateCv = async () => {
+    const data = await request<{ cv: CandidateCv | null }>("/profile/cv");
+    setActiveCv(data.cv);
+    setCvForm(cvToForm(data.cv));
+    return data.cv;
+  };
+
   const loadJobs = async () => {
     const data = await request<{ jobs: Job[] }>("/jobs");
     setJobs(data.jobs);
@@ -372,12 +515,25 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setSelectedJob(data.job);
   };
 
+  const selectImportedEmail = (email: ImportedEmail) => {
+    setSelectedImportedEmail(email);
+    setImportedEmailExtractedJobs([]);
+    setImportedEmailWarnings([]);
+    setSelectedJob(null);
+  };
+
   useEffect(() => {
     const loadSession = async () => {
       try {
         const data = await request<{ user: User }>("/auth/me");
         setUser(data.user);
-        await Promise.all([loadProfile(), loadJobs(), loadImportedEmails(), loadGmailStatus()]);
+        await Promise.all([
+          loadProfile(),
+          loadCandidateCv(),
+          loadJobs(),
+          loadImportedEmails(),
+          loadGmailStatus()
+        ]);
       } catch {
         setUser(null);
       }
@@ -425,7 +581,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setUser(data.user);
-      await Promise.all([loadProfile(), loadJobs(), loadImportedEmails(), loadGmailStatus()]);
+      await Promise.all([
+        loadProfile(),
+        loadCandidateCv(),
+        loadJobs(),
+        loadImportedEmails(),
+        loadGmailStatus()
+      ]);
       setStatus("Signed in");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
@@ -453,14 +615,21 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       const data = await request<{ profile: Profile }>("/profile", {
         method: "PUT",
         body: JSON.stringify({
+          profession: profileForm.profession.trim() || null,
+          bio: profileForm.bio.trim() || null,
           targetRoles: textToList(profileForm.targetRoles),
           strongSkills: textToList(profileForm.strongSkills),
+          secondarySkills: textToList(profileForm.secondarySkills),
+          engineeringSkills: textToList(profileForm.engineeringSkills),
+          aiSkills: textToList(profileForm.aiSkills),
           avoidSkills: textToList(profileForm.avoidSkills),
           minimumSalaryEur: salary,
           preferredLocations: textToList(profileForm.preferredLocations),
           remotePreference: profileForm.remotePreference.trim() || null,
           germanLevel: profileForm.germanLevel.trim() || null,
           englishLevel: profileForm.englishLevel.trim() || null,
+          languagesJson: textToLanguages(profileForm.languages),
+          experienceSummary: profileForm.experienceSummary.trim() || null,
           profileNotes: profileForm.profileNotes.trim() || null
         })
       });
@@ -470,6 +639,34 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setStatus("Profile saved");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Save failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleCvSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ profile: Profile; cv: CandidateCv }>("/profile/cv", {
+        method: "POST",
+        body: JSON.stringify({
+          sourceType: cvForm.sourceType || "typst",
+          sourceName: cvForm.sourceName || null,
+          sourceText: cvForm.sourceText
+        })
+      });
+
+      setProfile(data.profile);
+      setProfileForm(profileToForm(data.profile));
+      setActiveCv(data.cv);
+      setCvForm(cvToForm(data.cv));
+      setStatus("CV saved and profile updated");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "CV save failed");
     } finally {
       setIsBusy(false);
     }
@@ -566,7 +763,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         }
       );
 
-      setSelectedImportedEmail(data.email);
+      selectImportedEmail(data.email);
       if (!data.duplicate) {
         setImportedEmailForm(emptyImportedEmailForm);
       }
@@ -640,7 +837,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
       setGmailImportResult(data);
       if (data.emails[0]) {
-        setSelectedImportedEmail(data.emails[0]);
+        selectImportedEmail(data.emails[0]);
       }
       await Promise.all([loadImportedEmails(), loadGmailStatus()]);
       setStatus(`Gmail import complete: ${data.imported} new, ${data.duplicates} duplicate`);
@@ -658,7 +855,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setImportedEmailWarnings([]);
 
     try {
-      const data = await request<{ jobs: Job[]; email: ImportedEmail; warnings: string[] }>(
+      const data = await request<{
+        jobs: Job[];
+        email: ImportedEmail;
+        warnings: string[];
+        createdCount: number;
+        skippedDuplicates: number;
+      }>(
         `/imports/emails/${id}/extract`,
         {
           method: "POST"
@@ -672,7 +875,12 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         setSelectedJob(data.jobs[0]);
       }
       await Promise.all([loadImportedEmails(), loadJobs()]);
-      setStatus(`Extracted ${data.jobs.length} job${data.jobs.length === 1 ? "" : "s"} from email`);
+      setStatus(
+        `Extracted ${data.createdCount} job${data.createdCount === 1 ? "" : "s"} from email` +
+          (data.skippedDuplicates
+            ? `, skipped ${data.skippedDuplicates} duplicate${data.skippedDuplicates === 1 ? "" : "s"}`
+            : "")
+      );
     } catch (extractError) {
       setError(extractError instanceof Error ? extractError.message : "Email extraction failed");
     } finally {
@@ -767,6 +975,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
       setUser(null);
       setProfile(null);
+      setActiveCv(null);
       setJobs([]);
       setImportedEmails([]);
       setGmailStatus(null);
@@ -778,6 +987,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setImportWarnings([]);
       setImportedEmailWarnings([]);
       setProfileForm(emptyProfileForm);
+      setCvForm(emptyCvForm);
       setJobForm(emptyJobForm);
       setImportForm(emptyImportForm);
       setImportedEmailForm(emptyImportedEmailForm);
@@ -795,6 +1005,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
   const updateProfileField = (field: keyof ProfileFormState, value: string) => {
     setProfileForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const updateCvField = (field: keyof CvFormState, value: string) => {
+    setCvForm((current) => ({
       ...current,
       [field]: value
     }));
@@ -930,7 +1147,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         </form>
 
         {activeView === "profile" ? (
-          <form className="profile-panel" onSubmit={handleProfileSave}>
+          <section className="profile-panel">
             <div className="section-heading">
               <h2>Candidate Profile</h2>
               {profile ? (
@@ -938,7 +1155,130 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               ) : null}
             </div>
 
-            <div className="form-grid">
+            <form className="job-form" onSubmit={handleCvSave}>
+              <div className="section-heading">
+                <h3>CV Source</h3>
+                {activeCv ? (
+                  <p className="muted">
+                    {activeCv.sourceName || "Active CV"} updated{" "}
+                    {new Date(activeCv.updatedAt).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+              <p className="muted">
+                The CV source is the reference. The structured profile below is what AI review uses.
+                You can edit it after extraction.
+              </p>
+              <div className="form-grid">
+                <label>
+                  Source type
+                  <input
+                    value={cvForm.sourceType}
+                    onChange={(event) => updateCvField("sourceType", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Source name
+                  <input
+                    value={cvForm.sourceName}
+                    onChange={(event) => updateCvField("sourceName", event.target.value)}
+                  />
+                </label>
+                <label className="wide">
+                  Typst CV source
+                  <textarea
+                    value={cvForm.sourceText}
+                    onChange={(event) => updateCvField("sourceText", event.target.value)}
+                    rows={10}
+                  />
+                </label>
+              </div>
+              <div className="button-row">
+                <button disabled={isBusy || !user || !cvForm.sourceText.trim()} type="submit">
+                  Save CV and update profile from CV
+                </button>
+                <button
+                  disabled={isBusy || !user}
+                  type="button"
+                  onClick={() => void loadCandidateCv()}
+                >
+                  Refresh CV
+                </button>
+              </div>
+            </form>
+
+            <form className="job-form" onSubmit={handleProfileSave}>
+              <div className="section-heading">
+                <h3>Candidate Summary</h3>
+              </div>
+              <div className="form-grid">
+                <label>
+                  Profession
+                  <input
+                    value={profileForm.profession}
+                    onChange={(event) => updateProfileField("profession", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Preferred locations
+                  <textarea
+                    value={profileForm.preferredLocations}
+                    onChange={(event) =>
+                      updateProfileField("preferredLocations", event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Minimum salary EUR
+                  <input
+                    value={profileForm.minimumSalaryEur}
+                    onChange={(event) => updateProfileField("minimumSalaryEur", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label>
+                  Remote preference
+                  <input
+                    value={profileForm.remotePreference}
+                    onChange={(event) => updateProfileField("remotePreference", event.target.value)}
+                  />
+                </label>
+                <label>
+                  German level
+                  <input
+                    value={profileForm.germanLevel}
+                    onChange={(event) => updateProfileField("germanLevel", event.target.value)}
+                  />
+                </label>
+                <label>
+                  English level
+                  <input
+                    value={profileForm.englishLevel}
+                    onChange={(event) => updateProfileField("englishLevel", event.target.value)}
+                  />
+                </label>
+                <label className="wide">
+                  Languages
+                  <textarea
+                    value={profileForm.languages}
+                    onChange={(event) => updateProfileField("languages", event.target.value)}
+                    rows={4}
+                  />
+                </label>
+                <label className="wide">
+                  Bio
+                  <textarea
+                    value={profileForm.bio}
+                    onChange={(event) => updateProfileField("bio", event.target.value)}
+                    rows={4}
+                  />
+                </label>
+              </div>
+
+              <div className="section-heading">
+                <h3>Skills</h3>
+              </div>
+              <div className="form-grid">
               <label>
                 Target roles
                 <textarea
@@ -956,73 +1296,73 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               </label>
 
               <label>
+                Secondary skills
+                <textarea
+                  value={profileForm.secondarySkills}
+                  onChange={(event) => updateProfileField("secondarySkills", event.target.value)}
+                />
+              </label>
+
+              <label>
+                Engineering skills
+                <textarea
+                  value={profileForm.engineeringSkills}
+                  onChange={(event) => updateProfileField("engineeringSkills", event.target.value)}
+                />
+              </label>
+
+              <label>
+                AI skills
+                <textarea
+                  value={profileForm.aiSkills}
+                  onChange={(event) => updateProfileField("aiSkills", event.target.value)}
+                />
+              </label>
+
+              <label>
                 Avoid skills
                 <textarea
                   value={profileForm.avoidSkills}
                   onChange={(event) => updateProfileField("avoidSkills", event.target.value)}
                 />
               </label>
+              </div>
 
-              <label>
-                Preferred locations
-                <textarea
-                  value={profileForm.preferredLocations}
-                  onChange={(event) => updateProfileField("preferredLocations", event.target.value)}
-                />
-              </label>
+              <div className="section-heading">
+                <h3>Experience</h3>
+              </div>
+              <div className="form-grid">
+                <label className="wide">
+                  Experience summary
+                  <textarea
+                    value={profileForm.experienceSummary}
+                    onChange={(event) =>
+                      updateProfileField("experienceSummary", event.target.value)
+                    }
+                    rows={5}
+                  />
+                </label>
 
-              <label>
-                Minimum salary EUR
-                <input
-                  value={profileForm.minimumSalaryEur}
-                  onChange={(event) => updateProfileField("minimumSalaryEur", event.target.value)}
-                  inputMode="numeric"
-                />
-              </label>
+                <label className="wide">
+                  Profile notes
+                  <textarea
+                    value={profileForm.profileNotes}
+                    onChange={(event) => updateProfileField("profileNotes", event.target.value)}
+                    rows={5}
+                  />
+                </label>
+              </div>
 
-              <label>
-                Remote preference
-                <input
-                  value={profileForm.remotePreference}
-                  onChange={(event) => updateProfileField("remotePreference", event.target.value)}
-                />
-              </label>
-
-              <label>
-                German level
-                <input
-                  value={profileForm.germanLevel}
-                  onChange={(event) => updateProfileField("germanLevel", event.target.value)}
-                />
-              </label>
-
-              <label>
-                English level
-                <input
-                  value={profileForm.englishLevel}
-                  onChange={(event) => updateProfileField("englishLevel", event.target.value)}
-                />
-              </label>
-
-              <label className="wide">
-                Profile notes
-                <textarea
-                  value={profileForm.profileNotes}
-                  onChange={(event) => updateProfileField("profileNotes", event.target.value)}
-                  rows={5}
-                />
-              </label>
-            </div>
-
-            <div className="button-row">
-              <button disabled={isBusy || !user} type="submit">
-                Save profile
-              </button>
-              <button disabled={isBusy || !user} type="button" onClick={loadProfile}>
-                Refresh
-              </button>
-            </div>
-          </form>
+              <div className="button-row">
+                <button disabled={isBusy || !user} type="submit">
+                  Save profile
+                </button>
+                <button disabled={isBusy || !user} type="button" onClick={loadProfile}>
+                  Refresh
+                </button>
+              </div>
+            </form>
+          </section>
         ) : activeView === "import" ? (
           <section className="profile-panel">
             <div className="section-heading">
@@ -1300,21 +1640,24 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedImportedEmail(email);
-                          setImportedEmailExtractedJobs([]);
-                          setImportedEmailWarnings([]);
+                          selectImportedEmail(email);
                         }}
                       >
                         <span>
                           <strong>{email.subject}</strong>
                           <small>
-                            {email.fromName || email.fromEmail || email.providerMessageId}
+                            Email from {email.fromName || email.fromEmail || email.providerMessageId}
+                          </small>
+                          <small>
+                            Preview:{" "}
+                            {email.snippet || previewText(email.bodyText ?? "") || "No preview saved."}
                           </small>
                         </span>
                         <span className="badge-row">
-                          <em>{email.importStatus}</em>
-                          <em>{email.extractionStatus}</em>
-                          <em>{email.jobCount} jobs</em>
+                          <em>Import: {email.importStatus}</em>
+                          <em>Extraction: {email.extractionStatus}</em>
+                          <em>{extractedJobsStatus(email)}</em>
+                          {email.extractionStatus === "succeeded" ? <em>Processed</em> : null}
                         </span>
                       </button>
                     </li>
@@ -1337,11 +1680,24 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         type="button"
                         onClick={() => void handleExtractImportedEmail(selectedImportedEmail.id)}
                       >
-                        Extract jobs from email
+                        {selectedImportedEmail.extractionStatus === "succeeded"
+                          ? "Re-run extraction"
+                          : "Extract jobs from email"}
                       </button>
                     </div>
+                    {selectedImportedEmail.extractionStatus === "succeeded" ? (
+                      <p className="muted">Extraction complete. Re-running will skip duplicates.</p>
+                    ) : null}
 
                     <dl className="detail-list">
+                      <div>
+                        <dt>From</dt>
+                        <dd>
+                          {selectedImportedEmail.fromName ||
+                            selectedImportedEmail.fromEmail ||
+                            "Unknown sender"}
+                        </dd>
+                      </div>
                       <div>
                         <dt>Message ID</dt>
                         <dd>{selectedImportedEmail.providerMessageId}</dd>
@@ -1363,8 +1719,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         <dd>{selectedImportedEmail.extractionStatus}</dd>
                       </div>
                       <div>
-                        <dt>Jobs</dt>
-                        <dd>{selectedImportedEmail.jobCount}</dd>
+                        <dt>Extracted jobs</dt>
+                        <dd>{selectedEmailJobCountText(selectedImportedEmail)}</dd>
                       </div>
                     </dl>
 
@@ -1398,7 +1754,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                     <div className="description-block">
                       <h4>Created Jobs</h4>
                       {importedEmailExtractedJobs.length === 0 ? (
-                        <p className="muted">No jobs extracted from this email in this session.</p>
+                        <p className="muted">{selectedEmailEmptyJobsMessage(selectedImportedEmail)}</p>
                       ) : null}
                       <ul className="job-list">
                         {importedEmailExtractedJobs.map((job) => (

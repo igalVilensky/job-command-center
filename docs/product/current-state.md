@@ -55,6 +55,11 @@ Milestone 01 project skeleton has been created.
   - `PUT /profile`
 - `GET /profile` creates a default profile when missing.
 - Profile updates validate allowed fields and are scoped to the authenticated user.
+- Candidate profiles include richer editable CV-backed fields such as profession, bio, secondary/engineering/AI skills, languages JSON, and experience summary.
+- Candidate CV source records can be stored as active `CandidateCv` rows through authenticated `/profile/cv` routes.
+- `POST /profile/cv` stores Typst/plain CV source, performs lightweight deterministic profile extraction, updates the editable structured profile, and returns the active CV.
+- AI job review receives the richer structured profile and active CV context instead of relying only on shallow seed skills.
+- Review prompting treats React/Next, Vue/Nuxt, TypeScript/JavaScript, Node/Express, REST APIs, and SaaS/product work as related JS/TS ecosystem skills when the profile supports that.
 - `apps/web` has a minimal demo-login candidate profile editor.
 - Job inbox Prisma models exist:
   - `JobSource`
@@ -92,7 +97,14 @@ Milestone 01 project skeleton has been created.
 - Simulated imports deduplicate by user, provider, and provider message ID.
 - Imported email listing, simulation, and extraction are scoped to the authenticated user.
 - Imported email extraction reuses the existing API-to-AI-service extraction flow, creates jobs/descriptions, records an automation run, and updates email extraction status/job count.
+- Imported email extraction now sends generic cleaned source text to the LLM instead of raw tracking-heavy email bodies.
+- Imported email cleanup is provider-agnostic and removes common email noise such as long/tracking URLs, invisible padding, repeated CTAs, social links, and footer/legal text while preserving visible job content for LLM extraction.
+- The LLM remains responsible for semantic job extraction; there is no provider-specific or StepStone-specific job parser.
+- Zero-job extraction is valid, marks the imported email extraction as succeeded, and can return warnings for low-confidence sources.
+- Re-running extraction for the same imported email skips duplicate jobs by normalized company/title and keeps the linked job count accurate.
+- The web app surfaces safe backend error details for extraction failures.
 - `apps/web` has a simple `Imports` view for simulating an imported email, viewing import history, and extracting jobs from a saved email.
+- The Imports view now distinguishes imported emails from extracted jobs, shows not-yet-extracted emails as `Not extracted yet`, and marks processed emails with extracted-job status.
 - Email account Prisma models exist for Gmail OAuth connections.
 - Gmail OAuth tokens are stored through an encryption helper backed by `EMAIL_TOKEN_ENCRYPTION_KEY`.
 - Authenticated Gmail routes exist:

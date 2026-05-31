@@ -242,7 +242,36 @@ jobsRouter.post(
       update: {},
       create: { userId }
     });
+    const activeCv = await prisma.candidateCv.findFirst({
+      where: {
+        userId,
+        isActive: true
+      },
+      orderBy: {
+        updatedAt: "desc"
+      }
+    });
+    const candidateProfile = {
+      ...profile,
+      activeCv: activeCv
+        ? {
+            id: activeCv.id,
+            sourceType: activeCv.sourceType,
+            sourceName: activeCv.sourceName,
+            sourceText: activeCv.sourceText.slice(0, 4000),
+            parsedProfileJson: activeCv.parsedProfileJson
+          }
+        : null
+    };
     const inputText = [
+      profile.profession,
+      profile.bio,
+      profile.targetRoles.join(", "),
+      profile.strongSkills.join(", "),
+      profile.secondarySkills.join(", "),
+      profile.engineeringSkills.join(", "),
+      profile.aiSkills.join(", "),
+      profile.experienceSummary,
       existingJob.title,
       existingJob.company,
       existingJob.description?.summaryText,
@@ -268,7 +297,7 @@ jobsRouter.post(
 
     try {
       const aiPayload = await callReviewJob({
-        candidateProfile: profile,
+        candidateProfile,
         job: {
           id: existingJob.id,
           company: existingJob.company,

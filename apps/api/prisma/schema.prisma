@@ -12,6 +12,7 @@ model User {
   email            String            @unique
   passwordHash     String
   candidateProfile CandidateProfile?
+  candidateCvs     CandidateCv[]
   jobSources       JobSource[]
   jobs             Job[]
   importedEmails   ImportedEmail[]
@@ -25,9 +26,13 @@ model CandidateProfile {
   id                    String   @id @default(cuid())
   userId                String   @unique
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profession            String?
+  bio                   String?  @db.Text
   targetRoles           String[] @default([])
   strongSkills          String[] @default([])
   secondarySkills       String[] @default([])
+  engineeringSkills     String[] @default([])
+  aiSkills              String[] @default([])
   avoidSkills           String[] @default([])
   mixedSkills           String[] @default([])
   minimumSalaryEur      Int?
@@ -35,6 +40,9 @@ model CandidateProfile {
   remotePreference      String?
   germanLevel           String?
   englishLevel          String?
+  languagesJson         Json?
+  experienceSummary     String?  @db.Text
+  profileSourceId       String?
   seniorityNotes        String?
   industryPreferences   String[] @default([])
   industryAvoid         String[] @default([])
@@ -42,6 +50,21 @@ model CandidateProfile {
   profileNotes          String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model CandidateCv {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType        String   @default("typst")
+  sourceName        String?
+  sourceText        String   @db.Text
+  parsedProfileJson Json?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, isActive])
 }
 
 model JobSource {
