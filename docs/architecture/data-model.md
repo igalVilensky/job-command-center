@@ -85,6 +85,8 @@ Initial conceptual data model.
 - updated_at
 - archived_at
 
+Manual enrichment uses the existing `url`, `source_quality`, and `status` fields. Pasting a full description sets `source_quality` to `full_description` by default and marks the job `ready_for_analysis` so AI review can be rerun without deleting older reviews.
+
 ## ImportedEmail
 
 - id
@@ -133,6 +135,8 @@ Initial conceptual data model.
 - language
 - created_at
 - updated_at
+
+Manual enrichment stores the pasted full job description in `full_text`. The current clean behavior is to replace `raw_source_text` with the same pasted full description when enrichment supplies `fullDescription`.
 
 ## AiReview
 

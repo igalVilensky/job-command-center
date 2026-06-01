@@ -28,10 +28,19 @@ const remoteTypes = new Set([
 
 const sourceQualities = new Set([
   "full_description",
+  "partial_description",
   "digest_summary",
   "email_summary",
   "manual_note",
   "unknown"
+]);
+
+const enrichmentSourceQualities = new Set([
+  "unknown",
+  "digest_summary",
+  "email_summary",
+  "partial_description",
+  "full_description"
 ]);
 
 const userDecisions = new Set([
@@ -77,6 +86,14 @@ const createFields = new Set([
 const updateFields = new Set([
   ...createFields,
   "status",
+  "sourceQuality"
+]);
+
+const enrichmentFields = new Set([
+  "url",
+  "fullDescription",
+  "summaryText",
+  "language",
   "sourceQuality"
 ]);
 
@@ -131,6 +148,12 @@ export type JobUpdateData = {
       | "sourceQuality"
     >
   >;
+  description: JobDescriptionInput;
+  hasDescriptionUpdate: boolean;
+};
+
+export type JobEnrichmentData = {
+  job: Partial<Pick<Job, "url" | "sourceQuality" | "status">>;
   description: JobDescriptionInput;
   hasDescriptionUpdate: boolean;
 };
@@ -225,6 +248,25 @@ const optionalUrl = (value: unknown) => {
   }
 };
 
+const optionalHttpUrl = (value: unknown) => {
+  const url = optionalString(value, "url");
+
+  if (!url) {
+    return url;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Unsupported URL protocol");
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    throw new HttpError(400, "url must be a valid http or https URL or null");
+  }
+};
+
 const optionalRemoteType = (value: unknown) => {
   const remoteType = optionalString(value, "remoteType");
 
@@ -266,6 +308,20 @@ const optionalSourceQuality = (value: unknown) => {
 
   if (!sourceQualities.has(sourceQuality)) {
     throw new HttpError(400, "sourceQuality is not supported");
+  }
+
+  return sourceQuality;
+};
+
+const optionalEnrichmentSourceQuality = (value: unknown) => {
+  const sourceQuality = optionalString(value, "sourceQuality");
+
+  if (sourceQuality === undefined || sourceQuality === null) {
+    return sourceQuality;
+  }
+
+  if (!enrichmentSourceQualities.has(sourceQuality)) {
+    throw new HttpError(400, "sourceQuality is not supported for enrichment");
   }
 
   return sourceQuality;
@@ -331,6 +387,33 @@ const readDescription = (body: Record<string, unknown>) => ({
   rawSourceText: optionalString(body.rawSourceText, "rawSourceText"),
   language: optionalString(body.language, "language")
 });
+
+const limitedString = (value: unknown, field: string, maxLength: number) => {
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a string`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new HttpError(400, `${field} must not be empty`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new HttpError(400, `${field} must be ${maxLength} characters or fewer`);
+  }
+
+  return trimmed;
+};
+
+const optionalLimitedString = (value: unknown, field: string, maxLength: number) => {
+  const normalized = optionalString(value, field);
+
+  if (normalized && normalized.length > maxLength) {
+    throw new HttpError(400, `${field} must be ${maxLength} characters or fewer`);
+  }
+
+  return normalized;
+};
 
 const hasDescriptionText = (description: JobDescriptionInput) =>
   Boolean(description.summaryText || description.fullText || description.rawSourceText);
@@ -484,6 +567,69 @@ export const validateJobUpdate = (body: unknown): JobUpdateData => {
   }
 
   return { job, description, hasDescriptionUpdate };
+};
+
+export const validateJobEnrichment = (body: unknown): JobEnrichmentData => {
+  if (!isPlainObject(body)) {
+    throw new HttpError(400, "Request body must be an object");
+  }
+
+  rejectUnknownFields(body, enrichmentFields);
+
+  const job: JobEnrichmentData["job"] = {};
+  const description: JobDescriptionInput = {};
+  let hasUsefulField = false;
+  let hasDescriptionUpdate = false;
+  let hasFullDescriptionUpdate = false;
+
+  if ("url" in body) {
+    job.url = optionalHttpUrl(body.url);
+    hasUsefulField = true;
+  }
+
+  if ("fullDescription" in body) {
+    const fullDescription = limitedString(body.fullDescription, "fullDescription", 100_000);
+    description.fullText = fullDescription;
+    description.rawSourceText = fullDescription;
+    job.status = "ready_for_analysis";
+    hasUsefulField = true;
+    hasDescriptionUpdate = true;
+    hasFullDescriptionUpdate = true;
+  }
+
+  if ("summaryText" in body) {
+    description.summaryText = optionalLimitedString(body.summaryText, "summaryText", 10_000);
+    hasUsefulField = true;
+    hasDescriptionUpdate = true;
+  }
+
+  if ("language" in body) {
+    description.language = optionalLimitedString(body.language, "language", 32);
+    hasUsefulField = true;
+    hasDescriptionUpdate = true;
+  }
+
+  if ("sourceQuality" in body) {
+    const sourceQuality = optionalEnrichmentSourceQuality(body.sourceQuality);
+    if (sourceQuality) {
+      job.sourceQuality = sourceQuality;
+      hasUsefulField = true;
+    }
+  }
+
+  if (hasFullDescriptionUpdate && !job.sourceQuality) {
+    job.sourceQuality = "full_description";
+  }
+
+  if (!hasUsefulField) {
+    throw new HttpError(400, "At least one enrichment field must be provided");
+  }
+
+  return {
+    job,
+    description,
+    hasDescriptionUpdate
+  };
 };
 
 export const validateJobPipelineUpdate = (body: unknown): JobPipelineUpdateData => {

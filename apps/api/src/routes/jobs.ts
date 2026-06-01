@@ -7,6 +7,7 @@ import {
   serializeAiReview,
   serializeJob,
   shouldCreateDescription,
+  validateJobEnrichment,
   validateJobApplicationStatusFilter,
   validateJobCreate,
   validateJobPipelineUpdate,
@@ -187,6 +188,37 @@ jobsRouter.put(
 
       return tx.job.update({
         where: { id: req.params.id },
+        data: input.job,
+        include: jobInclude
+      });
+    });
+
+    res.status(200).json({ job: serializeJob(job) });
+  })
+);
+
+jobsRouter.patch(
+  "/:id/enrich",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userId = getUserId(req as AuthenticatedRequest);
+    const existingJob = await findOwnedJob(req.params.id, userId);
+    const input = validateJobEnrichment(req.body);
+
+    const job = await prisma.$transaction(async (tx) => {
+      if (input.hasDescriptionUpdate) {
+        await tx.jobDescription.upsert({
+          where: { jobId: existingJob.id },
+          update: input.description,
+          create: {
+            jobId: existingJob.id,
+            ...input.description
+          }
+        });
+      }
+
+      return tx.job.update({
+        where: { id: existingJob.id },
         data: input.job,
         include: jobInclude
       });

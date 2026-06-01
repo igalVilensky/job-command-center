@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 09 Gmail OAuth connection and manual Gmail import phase.
+This project is currently in the Milestone 10 manual job detail enrichment phase.
 
 ## Existing prototype
 
@@ -75,8 +75,12 @@ Milestone 01 project skeleton has been created.
   - `POST /jobs`
   - `GET /jobs/:id`
   - `PUT /jobs/:id`
+  - `PATCH /jobs/:id/enrich`
   - `POST /jobs/:id/review`
   - `POST /jobs/:id/archive`
+- Manual job detail enrichment lets the user paste the original job URL and full job description into an existing owned job. There is no scraping, auto-fetching, browser extension, cover-letter generation, or auto-apply behavior.
+- Enrichment updates `Job.url`, upserts `JobDescription.fullText`, replaces `JobDescription.rawSourceText` with the pasted full description, can update language/source quality, and marks the job `ready_for_analysis` when a full description is supplied.
+- Existing AI reviews are preserved after enrichment. The status change makes it clear that rerunning AI review is recommended, and the review route uses the enriched description and URL.
 - Authenticated AI orchestration routes exist:
   - `POST /ai/extract-jobs`
 - Manual job creation creates a manual source and optional description.
@@ -89,7 +93,7 @@ Milestone 01 project skeleton has been created.
 - Pipeline updates are scoped to the authenticated user and validate allowed user decision/application status values.
 - `appliedAt` and `rejectedAt` are auto-set when application status becomes `applied` or `rejected`.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
-- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, AI review action, and application pipeline editor.
+- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, manual job enrichment form, AI review action, and application pipeline editor.
 - Imported email Prisma models exist for simulated Gmail/job-alert messages.
 - Jobs can optionally reference the imported email that produced them.
 - Authenticated import routes exist:

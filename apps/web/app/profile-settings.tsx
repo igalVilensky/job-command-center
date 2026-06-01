@@ -157,6 +157,13 @@ type JobFormState = {
   fullDescription: string;
 };
 
+type JobEnrichmentFormState = {
+  url: string;
+  fullDescription: string;
+  language: string;
+  sourceQuality: string;
+};
+
 type ImportFormState = {
   sourceText: string;
   sourceType: string;
@@ -222,6 +229,14 @@ const emptyJobForm: JobFormState = {
   url: "",
   fullDescription: ""
 };
+
+const enrichmentSourceQualityOptions = [
+  "unknown",
+  "digest_summary",
+  "email_summary",
+  "partial_description",
+  "full_description"
+];
 
 const emptyImportForm: ImportFormState = {
   sourceText: "",
@@ -412,6 +427,16 @@ const jobToPipelineForm = (job: Job): PipelineFormState => ({
   followUpDate: dateToInput(job.followUpDate)
 });
 
+const jobToEnrichmentForm = (job: Job | null): JobEnrichmentFormState => ({
+  url: job?.url ?? "",
+  fullDescription: job?.description?.fullText ?? "",
+  language: job?.description?.language ?? "",
+  sourceQuality:
+    job && enrichmentSourceQualityOptions.includes(job.sourceQuality)
+      ? job.sourceQuality
+      : "unknown"
+});
+
 const parseResponse = async <T,>(response: Response): Promise<T> => {
   const body = await response.json().catch(() => null);
 
@@ -438,6 +463,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
   const [cvForm, setCvForm] = useState<CvFormState>(emptyCvForm);
   const [jobForm, setJobForm] = useState<JobFormState>(emptyJobForm);
+  const [enrichmentForm, setEnrichmentForm] =
+    useState<JobEnrichmentFormState>(jobToEnrichmentForm(null));
   const [importForm, setImportForm] = useState<ImportFormState>(emptyImportForm);
   const [importedEmailForm, setImportedEmailForm] =
     useState<ImportedEmailFormState>(emptyImportedEmailForm);
@@ -566,6 +593,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
   useEffect(() => {
     setPipelineForm(selectedJob ? jobToPipelineForm(selectedJob) : emptyPipelineForm);
+    setEnrichmentForm(jobToEnrichmentForm(selectedJob));
   }, [selectedJob]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -908,6 +936,68 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const saveJobEnrichment = async (runReview: boolean) => {
+    if (!selectedJob) {
+      return;
+    }
+
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    const fullDescription = enrichmentForm.fullDescription.trim();
+    let savedJob: Job | null = null;
+
+    try {
+      const data = await request<{ job: Job }>(`/jobs/${selectedJob.id}/enrich`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          url: enrichmentForm.url.trim() || null,
+          ...(fullDescription ? { fullDescription } : {}),
+          language: enrichmentForm.language.trim() || null,
+          sourceQuality: fullDescription ? "full_description" : enrichmentForm.sourceQuality
+        })
+      });
+
+      savedJob = data.job;
+      setSelectedJob(data.job);
+      setEnrichmentForm(jobToEnrichmentForm(data.job));
+      await loadJobs();
+
+      if (runReview) {
+        const reviewData = await request<{ job: Job; review: AiReview }>(
+          `/jobs/${data.job.id}/review`,
+          {
+            method: "POST"
+          }
+        );
+
+        setSelectedJob(reviewData.job);
+        setEnrichmentForm(jobToEnrichmentForm(reviewData.job));
+        await loadJobs();
+        setStatus(`Enrichment saved. Review complete: ${reviewData.review.decision}`);
+        return;
+      }
+
+      setStatus("Job details enriched");
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : savedJob && runReview
+            ? "Review failed after enrichment"
+            : "Enrichment save failed"
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleEnrichmentSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await saveJobEnrichment(false);
+  };
+
   const handleArchiveJob = async (id: string) => {
     setIsBusy(true);
     setError("");
@@ -989,6 +1079,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setProfileForm(emptyProfileForm);
       setCvForm(emptyCvForm);
       setJobForm(emptyJobForm);
+      setEnrichmentForm(jobToEnrichmentForm(null));
       setImportForm(emptyImportForm);
       setImportedEmailForm(emptyImportedEmailForm);
       setGmailImportForm(defaultGmailImportForm);
@@ -1019,6 +1110,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
   const updateJobField = (field: keyof JobFormState, value: string) => {
     setJobForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const updateEnrichmentField = (field: keyof JobEnrichmentFormState, value: string) => {
+    setEnrichmentForm((current) => ({
       ...current,
       [field]: value
     }));
@@ -1066,7 +1164,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     <main className="page-shell" data-api-url={apiUrl}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">Milestone 09</p>
+          <p className="eyebrow">Milestone 10</p>
           <h1>Job Command Center</h1>
         </div>
         <p className="api-pill">API: {apiUrl}</p>
@@ -1990,6 +2088,85 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                         </dd>
                       </div>
                     </dl>
+                    {selectedJob.sourceQuality !== "full_description" ? (
+                      <p className="muted">
+                        This job may only have an email summary. Paste the full description for
+                        better AI review.
+                      </p>
+                    ) : null}
+                    {selectedJob.status === "ready_for_analysis" && selectedJob.latestAiReview ? (
+                      <p className="muted">
+                        Job details changed. Rerun AI review for updated recommendation.
+                      </p>
+                    ) : null}
+                    <form className="description-block pipeline-form" onSubmit={handleEnrichmentSave}>
+                      <div className="section-heading">
+                        <h4>Job Detail Enrichment</h4>
+                      </div>
+
+                      <div className="form-grid">
+                        <label>
+                          Original job URL
+                          <input
+                            value={enrichmentForm.url}
+                            onChange={(event) =>
+                              updateEnrichmentField("url", event.target.value)
+                            }
+                            type="url"
+                          />
+                        </label>
+
+                        <label>
+                          Language
+                          <input
+                            value={enrichmentForm.language}
+                            onChange={(event) =>
+                              updateEnrichmentField("language", event.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          Source quality
+                          <select
+                            value={enrichmentForm.sourceQuality}
+                            onChange={(event) =>
+                              updateEnrichmentField("sourceQuality", event.target.value)
+                            }
+                          >
+                            {enrichmentSourceQualityOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="wide">
+                          Full job description
+                          <textarea
+                            value={enrichmentForm.fullDescription}
+                            onChange={(event) =>
+                              updateEnrichmentField("fullDescription", event.target.value)
+                            }
+                            rows={8}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="button-row">
+                        <button disabled={isBusy || !user} type="submit">
+                          Save enriched details
+                        </button>
+                        <button
+                          disabled={isBusy || !user}
+                          type="button"
+                          onClick={() => void saveJobEnrichment(true)}
+                        >
+                          Save and run AI review
+                        </button>
+                      </div>
+                    </form>
                     <form className="description-block pipeline-form" onSubmit={handlePipelineSave}>
                       <div className="section-heading">
                         <h4>Application Pipeline</h4>
