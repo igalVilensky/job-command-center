@@ -39,8 +39,13 @@ Supported fields:
 - `avoidSkills`
 - `mixedSkills`
 - `minimumSalaryEur`
+- `salaryMinEur`
+- `salaryMaxEur`
 - `preferredLocations`
 - `remotePreference`
+- `acceptableRemoteTypes`
+- `locationNotes`
+- `salaryNotes`
 - `germanLevel`
 - `englishLevel`
 - `seniorityNotes`
@@ -54,7 +59,9 @@ Supported fields:
 - Array fields must be arrays of strings.
 - Strings are trimmed.
 - Empty array items are removed.
-- `minimumSalaryEur` must be a positive integer or `null`.
+- `minimumSalaryEur`, `salaryMinEur`, and `salaryMaxEur` must be positive integers or `null`.
+- `salaryMinEur` must be less than or equal to `salaryMaxEur` when both are provided.
+- `acceptableRemoteTypes` must contain only supported remote modes.
 - `availabilityDate` must be `null` or a valid date string.
 - Unknown fields are rejected.
 - `userId` cannot be changed.
@@ -71,9 +78,11 @@ Supported fields:
   - target roles
   - strong skills
   - avoid skills
-  - minimum salary
+  - desired salary min/max
+  - salary notes
   - preferred locations
-  - remote preference
+  - location notes
+  - acceptable remote modes
   - German level
   - English level
   - profile notes

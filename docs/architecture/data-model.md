@@ -25,8 +25,13 @@ Initial conceptual data model.
 - avoid_skills
 - mixed_skills
 - minimum_salary_eur
+- salary_min_eur
+- salary_max_eur
 - preferred_locations
 - remote_preference
+- acceptable_remote_types
+- location_notes
+- salary_notes
 - german_level
 - english_level
 - languages_json
@@ -39,6 +44,8 @@ Initial conceptual data model.
 - profile_notes
 - created_at
 - updated_at
+
+Candidate profile separates CV-backed facts from job-search preferences. `minimum_salary_eur` is a legacy single-threshold field; current review logic should prefer `salary_min_eur` and `salary_max_eur` as a desired salary range, use `acceptable_remote_types` for multi-mode remote preferences, and use `preferred_locations` plus `location_notes` as editable filters.
 
 ## CandidateCv
 

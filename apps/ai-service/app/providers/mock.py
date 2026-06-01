@@ -170,7 +170,7 @@ def _flatten_profile_terms(profile: dict[str, Any], keys: list[str]) -> list[str
     return terms
 
 
-def _salary_ceiling(salary_text: str) -> int | None:
+def _salary_range(salary_text: str) -> tuple[int, int] | None:
     numbers = []
     for raw in re.findall(r"\d[\d.,]*\s?k?", salary_text.lower()):
         compact = raw.replace(".", "").replace(",", "").replace(" ", "")
@@ -179,12 +179,24 @@ def _salary_ceiling(salary_text: str) -> int | None:
         if compact.isdigit():
             numbers.append(int(compact) * multiplier)
 
-    return max(numbers) if numbers else None
+    if not numbers:
+        return None
+
+    return min(numbers), max(numbers)
 
 
-def _minimum_salary(profile: dict[str, Any]) -> int | None:
-    value = profile.get("minimumSalaryEur")
-    return value if isinstance(value, int) and value > 0 else None
+def _salary_preferences(profile: dict[str, Any]) -> tuple[int | None, int | None]:
+    salary_min = profile.get("salaryMinEur")
+    salary_max = profile.get("salaryMaxEur")
+    legacy_minimum = profile.get("minimumSalaryEur")
+
+    if not isinstance(salary_min, int) or salary_min <= 0:
+        salary_min = legacy_minimum if isinstance(legacy_minimum, int) and legacy_minimum > 0 else None
+
+    if not isinstance(salary_max, int) or salary_max <= 0:
+        salary_max = None
+
+    return salary_min, salary_max
 
 
 class MockProvider:
@@ -270,13 +282,21 @@ class MockProvider:
             risk_flags.append("Source is incomplete; review needs a full job description.")
             clarification_questions.append("Can you paste the full job description before deciding?")
 
-        minimum_salary = _minimum_salary(candidate_profile)
-        salary_ceiling = _salary_ceiling(str(job.get("salaryText") or ""))
-        if minimum_salary and salary_ceiling and salary_ceiling < minimum_salary:
-            risk_flags.append("Listed salary appears below the candidate minimum.")
+        salary_min, salary_max = _salary_preferences(candidate_profile)
+        job_salary_min = job.get("salaryMinEur")
+        job_salary_max = job.get("salaryMaxEur")
+        if not isinstance(job_salary_min, int) or not isinstance(job_salary_max, int):
+            text_range = _salary_range(str(job.get("salaryText") or ""))
+            if text_range:
+                job_salary_min, job_salary_max = text_range
+
+        if salary_min and isinstance(job_salary_max, int) and job_salary_max < salary_min:
+            risk_flags.append("Listed salary appears below the candidate target range.")
             score -= 25
-        elif minimum_salary and not job.get("salaryText"):
+        elif salary_min and not job.get("salaryText") and job_salary_max is None:
             clarification_questions.append("What salary range is available for this role?")
+        elif salary_min and salary_max and isinstance(job_salary_min, int) and job_salary_min > salary_max:
+            clarification_questions.append("The salary range appears above the target range; confirm expectations.")
 
         if avoid_hits:
             risk_flags.append(f"Role mentions avoided skill area: {', '.join(avoid_hits)}.")

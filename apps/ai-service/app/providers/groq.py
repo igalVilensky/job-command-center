@@ -17,7 +17,7 @@ REMOTE_TYPES = {
     "onsite",
     "unknown",
 }
-SOURCE_QUALITIES = {"full_description", "digest_summary", "email_summary", "unknown"}
+SOURCE_QUALITIES = {"full_description", "partial_description", "digest_summary", "email_summary", "unknown"}
 CONFIDENCE_VALUES = {"high", "medium", "low"}
 REVIEW_DECISIONS = {"apply", "maybe", "skip", "review_manually"}
 logger = logging.getLogger(__name__)
@@ -402,7 +402,7 @@ Return exactly one JSON object matching this schema:
 
 Allowed sourceKind values: single_job, multi_job_digest, recruiter_message, not_job_source.
 Allowed remoteType values: remote, remote_first, hybrid, homeoffice_possible, onsite, unknown.
-Allowed sourceQuality values: full_description, digest_summary, email_summary, unknown.
+Allowed sourceQuality values: full_description, partial_description, digest_summary, email_summary, unknown.
 Allowed confidence values: high, medium, low.
 The jobs array may be empty when no confident job is present.
 
@@ -490,27 +490,39 @@ Rules:
 - review must be a non-empty string with 2-4 sentences.
 - cvAngle must be a non-empty string.
 - score must be realistic; use 0 only for completely irrelevant jobs.
-- Evaluate salary, location, remote policy, tech stack, and source completeness.
+- Evaluate salary, location, remote policy, tech stack, and source completeness against candidateProfile preferences.
 - Mention concrete matching and mismatch signals from the job.
 - Put concrete salary, stack, agency/client-project, or source risks in riskFlags when present.
-- Do not mark salary as a risk if the range includes the candidate minimum.
+- Prefer candidateProfile.salaryMinEur and candidateProfile.salaryMaxEur as the desired salary range. Treat candidateProfile.minimumSalaryEur as legacy fallback only when no salary range exists.
+- Use salary range overlap logic: if the job salary range overlaps the candidate range, do not flag "Salary below minimum" or similar salary-below-target risk.
+- For example, candidate 48000-55000 EUR and job 43000-66000 EUR overlap and are salary-acceptable.
+- If the job maximum is below candidate salaryMinEur, salary is below target. If the job minimum is above candidate salaryMaxEur, salary exceeds target and is positive.
+- If salary is estimated, broad, or missing, mention uncertainty or ask a clarification question, but do not create a hard salary risk unless clearly below target.
 - Do not assume "Homeoffice möglich" means fully remote.
-- Do not treat location as blocker if remote-first or fully remote is clear.
-- Penalize explicit C1/native German if the candidate has a lower German level.
+- Candidate can accept multiple remote modes from candidateProfile.acceptableRemoteTypes. If job.remoteType is in that list, do not add a remote risk.
+- If job.remoteType is unknown, ask a clarification question instead of applying a heavy penalty.
+- Do not treat location as blocker if remote-first or fully remote is clear or accepted by candidateProfile.acceptableRemoteTypes.
+- If the role is mandatory onsite and the city is outside candidateProfile.preferredLocations, treat location as a risk.
+- If the job location is a German city outside preferredLocations but candidateProfile includes Germany and accepts onsite/hybrid, ask whether commute/relocation works instead of auto-skipping unless the job explicitly forbids remote and the candidate disallows onsite.
+- Penalize explicit C1/native German if the candidate has a lower German level. Treat "fluent German" with candidate German B2 as a soft risk or clarification unless the job explicitly requires native/C1 German.
 - Treat short digest summaries as incomplete.
 - Treat the candidate as full-stack JS/TS when profile fields or CV context say so.
-- React, Next.js, Vue, Nuxt, TypeScript, JavaScript, Node.js, Express, REST APIs, SaaS/product work, and web application delivery are related skills.
+- React, Angular, Next.js, Vue, Nuxt, TypeScript, JavaScript, React Native, Node.js, Express, REST APIs, SaaS/product work, and web application delivery are related JS/TS skills.
+- TDD, testing/QA, pair programming, code reviews, and CI/CD are positive matches when the candidate has Testing/QA, CI/CD, or collaborative product engineering experience.
 - Do not skip React/frontend jobs merely because Node.js is not central.
 - Do not skip Vue/Nuxt jobs merely because React is not central.
+- Do not penalize Angular as an unrelated stack for a TypeScript/frontend candidate; treat it as adjacent JS/TS frontend ecosystem experience.
 - Do not skip TypeScript/frontend roles merely because backend is not central.
 - For frontend-heavy roles, score based on frontend stack match, TypeScript/JavaScript match, product/SaaS relevance, salary, location, remote, German level, and seniority.
-- Backend-only non-JS stacks such as Java-only, PHP-only, or C#-only may be lower fit unless TypeScript/React/Vue/Node or relevant web/product skills are also present.
-- If a role includes React, Vue, Nuxt, Next, TypeScript, JavaScript, Node, REST APIs, SaaS/product, or web apps, it should usually be at least maybe unless there are major blockers.
+- Backend-only non-JS stacks such as Java-only, PHP-only, or C#-only may be lower fit unless TypeScript/React/Angular/Vue/Node or relevant web/product skills are also present.
+- Do not treat Java as a blocker when it appears as company background or backend context but the role itself is frontend TypeScript/React/Angular.
+- If a full_description frontend role includes TypeScript plus React or Angular, it is a strong relevant match for a frontend/full-stack JS/TS candidate and should usually score above 60 unless there are major blockers.
+- If a role includes React, Angular, Vue, Nuxt, Next, TypeScript, JavaScript, Node, REST APIs, SaaS/product, or web apps, it should usually be at least maybe unless there are major blockers.
 - Candidate German level must come from the profile; do not assume C1/native if the profile says B2.
 - Candidate is full-stack and has strong frontend experience when the profile says so.
 - Treat Homeoffice möglich as a clarification point, not an automatic skip.
 - If source is a short email/digest summary, recommend getting the full description instead of a harsh skip.
-- Skip only for serious blockers: explicit C1/native German above profile level, mandatory on-site/relocation far from preferred locations, clearly unrelated stack, salary clearly below minimum, or seniority mismatch.
+- Skip only for serious blockers: explicit C1/native German above profile level, mandatory on-site/relocation far from preferred locations when onsite is not acceptable, clearly unrelated stack, salary clearly below target range with no overlap, or seniority mismatch.
 - AI review is advisory; the user decides.
 
 Input:

@@ -36,8 +36,13 @@ model CandidateProfile {
   avoidSkills           String[] @default([])
   mixedSkills           String[] @default([])
   minimumSalaryEur      Int?
+  salaryMinEur          Int?
+  salaryMaxEur          Int?
   preferredLocations    String[] @default([])
   remotePreference      String?
+  acceptableRemoteTypes String[] @default([])
+  locationNotes         String?
+  salaryNotes           String?
   germanLevel           String?
   englishLevel          String?
   languagesJson         Json?

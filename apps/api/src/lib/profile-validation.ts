@@ -9,6 +9,7 @@ const arrayFields = [
   "aiSkills",
   "avoidSkills",
   "mixedSkills",
+  "acceptableRemoteTypes",
   "preferredLocations",
   "industryPreferences",
   "industryAvoid"
@@ -18,6 +19,8 @@ const stringFields = [
   "profession",
   "bio",
   "remotePreference",
+  "locationNotes",
+  "salaryNotes",
   "germanLevel",
   "englishLevel",
   "experienceSummary",
@@ -25,9 +28,18 @@ const stringFields = [
   "profileNotes"
 ] as const;
 
-const nullableFields = ["minimumSalaryEur", "availabilityDate"] as const;
+const nullableFields = ["minimumSalaryEur", "salaryMinEur", "salaryMaxEur", "availabilityDate"] as const;
 
 const jsonFields = ["languagesJson"] as const;
+
+const acceptableRemoteTypes = new Set([
+  "remote",
+  "remote_first",
+  "hybrid",
+  "homeoffice_possible",
+  "onsite",
+  "unknown"
+]);
 
 const allowedFields = new Set<string>([
   ...arrayFields,
@@ -47,8 +59,13 @@ export type ProfileUpdateData = Partial<{
   avoidSkills: string[];
   mixedSkills: string[];
   minimumSalaryEur: number | null;
+  salaryMinEur: number | null;
+  salaryMaxEur: number | null;
+  acceptableRemoteTypes: string[];
   preferredLocations: string[];
   remotePreference: string | null;
+  locationNotes: string | null;
+  salaryNotes: string | null;
   germanLevel: string | null;
   englishLevel: string | null;
   languagesJson: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
@@ -98,6 +115,17 @@ const normalizeStringArray = (value: unknown, field: string) => {
     .filter((item) => item.length > 0);
 };
 
+const normalizeRemoteTypeArray = (value: unknown) => {
+  const values = normalizeStringArray(value, "acceptableRemoteTypes");
+  const invalid = values.filter((item) => !acceptableRemoteTypes.has(item));
+
+  if (invalid.length > 0) {
+    throw new HttpError(400, `Unsupported acceptableRemoteTypes: ${invalid.join(", ")}`);
+  }
+
+  return values;
+};
+
 const normalizeJsonObject = (value: unknown, field: string) => {
   if (value === null) {
     return Prisma.JsonNull;
@@ -110,13 +138,13 @@ const normalizeJsonObject = (value: unknown, field: string) => {
   return value as Prisma.InputJsonObject;
 };
 
-const normalizeMinimumSalary = (value: unknown) => {
+const normalizeSalaryPreference = (value: unknown, field: string) => {
   if (value === null) {
     return null;
   }
 
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new HttpError(400, "minimumSalaryEur must be a positive integer or null");
+    throw new HttpError(400, `${field} must be a positive integer or null`);
   }
 
   return value;
@@ -160,7 +188,10 @@ export const validateProfileUpdate = (body: unknown): ProfileUpdateData => {
 
   for (const field of arrayFields) {
     if (field in body) {
-      dynamicData[field] = normalizeStringArray(body[field], field);
+      dynamicData[field] =
+        field === "acceptableRemoteTypes"
+          ? normalizeRemoteTypeArray(body[field])
+          : normalizeStringArray(body[field], field);
     }
   }
 
@@ -177,7 +208,27 @@ export const validateProfileUpdate = (body: unknown): ProfileUpdateData => {
   }
 
   if ("minimumSalaryEur" in body) {
-    data.minimumSalaryEur = normalizeMinimumSalary(body.minimumSalaryEur);
+    data.minimumSalaryEur = normalizeSalaryPreference(body.minimumSalaryEur, "minimumSalaryEur");
+  }
+
+  if ("salaryMinEur" in body) {
+    data.salaryMinEur = normalizeSalaryPreference(body.salaryMinEur, "salaryMinEur");
+  }
+
+  if ("salaryMaxEur" in body) {
+    data.salaryMaxEur = normalizeSalaryPreference(body.salaryMaxEur, "salaryMaxEur");
+  }
+
+  const salaryMinEur = data.salaryMinEur === undefined ? undefined : data.salaryMinEur;
+  const salaryMaxEur = data.salaryMaxEur === undefined ? undefined : data.salaryMaxEur;
+  if (
+    salaryMinEur !== undefined &&
+    salaryMinEur !== null &&
+    salaryMaxEur !== undefined &&
+    salaryMaxEur !== null &&
+    salaryMinEur > salaryMaxEur
+  ) {
+    throw new HttpError(400, "salaryMinEur must be less than or equal to salaryMaxEur");
   }
 
   if ("availabilityDate" in body) {

@@ -52,6 +52,19 @@ Experience highlights:
 `.trim();
 
 const OLD_DEMO_PROFILE_NOTES = "Prefers product engineering roles.";
+const DEMO_SALARY_MIN_EUR = 48000;
+const DEMO_SALARY_MAX_EUR = 55000;
+const DEMO_ACCEPTABLE_REMOTE_TYPES = [
+  "remote",
+  "remote_first",
+  "hybrid",
+  "homeoffice_possible",
+  "onsite"
+];
+const DEMO_PREFERRED_LOCATIONS = ["Leipzig", "Remote", "Germany"];
+const DEMO_LOCATION_NOTES =
+  "Open to remote, hybrid, and onsite roles depending on city, commute, and relocation context.";
+const DEMO_SALARY_NOTES = "Target range is 48000-55000 EUR; evaluate job ranges by overlap.";
 
 const normalizedList = (items: string[]) => items.map((item) => item.trim().toLowerCase()).sort();
 
@@ -73,6 +86,12 @@ const isOldDemoProfile = (profile: CandidateProfile) =>
   profile.germanLevel === "B1" &&
   profile.englishLevel === "C1" &&
   profile.remotePreference === "hybrid" &&
+  (profile.salaryMinEur === null || profile.salaryMinEur === 70000) &&
+  profile.salaryMaxEur === null &&
+  (profile.acceptableRemoteTypes.length === 0 ||
+    listMatches(profile.acceptableRemoteTypes, ["hybrid"])) &&
+  isBlank(profile.locationNotes) &&
+  isBlank(profile.salaryNotes) &&
   profile.profileNotes === OLD_DEMO_PROFILE_NOTES &&
   isBlank(profile.profession) &&
   isBlank(profile.bio) &&
@@ -142,7 +161,14 @@ async function main() {
     secondarySkills: parsedProfile.secondarySkills,
     engineeringSkills: parsedProfile.engineeringSkills,
     aiSkills: parsedProfile.aiSkills,
-    preferredLocations: parsedProfile.preferredLocations,
+    minimumSalaryEur: null,
+    salaryMinEur: DEMO_SALARY_MIN_EUR,
+    salaryMaxEur: DEMO_SALARY_MAX_EUR,
+    acceptableRemoteTypes: DEMO_ACCEPTABLE_REMOTE_TYPES,
+    preferredLocations: DEMO_PREFERRED_LOCATIONS,
+    remotePreference: null,
+    locationNotes: DEMO_LOCATION_NOTES,
+    salaryNotes: DEMO_SALARY_NOTES,
     germanLevel: parsedProfile.germanLevel,
     englishLevel: parsedProfile.englishLevel,
     languagesJson: parsedProfile.languagesJson,
@@ -173,8 +199,6 @@ async function main() {
         ...profileData,
         avoidSkills: [],
         mixedSkills: [],
-        minimumSalaryEur: null,
-        remotePreference: null,
         seniorityNotes: null,
         industryPreferences: [],
         industryAvoid: [],

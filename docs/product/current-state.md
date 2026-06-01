@@ -56,12 +56,14 @@ Milestone 01 project skeleton has been created.
   - `PUT /profile`
 - `GET /profile` creates a default profile when missing.
 - Profile updates validate allowed fields and are scoped to the authenticated user.
+- Candidate Profile separates CV-backed background facts from job-search preferences. Salary preferences are a range (`salaryMinEur`/`salaryMaxEur`), remote preference supports multiple acceptable modes, and location/salary notes are editable.
 - Candidate profiles include richer editable CV-backed fields such as profession, bio, secondary/engineering/AI skills, languages JSON, and experience summary.
 - Candidate CV source records can be stored as active `CandidateCv` rows through authenticated `/profile/cv` routes.
 - `POST /profile/cv` stores Typst/plain CV source, performs lightweight deterministic profile extraction, updates the editable structured profile, and returns the active CV.
-- CV extraction updates parsed CV-backed fields such as profession, bio, roles, skills, language levels, experience summary, and CV-detected locations. Salary expectations, avoid skills, and remote preference are not inferred from CV source and remain manual profile fields.
+- CV extraction updates parsed CV-backed fields such as profession, bio, roles, skills, language levels, and experience summary. Salary range, acceptable remote modes, preferred locations, avoid skills, and preference notes are not inferred from CV source and remain manual profile fields.
 - AI job review receives the richer structured profile and active CV context instead of relying only on shallow seed skills.
-- Review prompting treats React/Next, Vue/Nuxt, TypeScript/JavaScript, Node/Express, REST APIs, and SaaS/product work as related JS/TS ecosystem skills when the profile supports that.
+- Review prompting treats React/Angular/Next, Vue/Nuxt, TypeScript/JavaScript, Node/Express, REST APIs, testing/QA, CI/CD, and SaaS/product work as related JS/TS ecosystem skills when the profile supports that.
+- Review prompting uses salary range overlap logic, so a job range such as 43000-66000 EUR is not below target for a 48000-55000 EUR candidate range.
 - `apps/web` has a minimal demo-login candidate profile editor.
 - Job inbox Prisma models exist:
   - `JobSource`

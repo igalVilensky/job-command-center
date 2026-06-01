@@ -73,6 +73,34 @@ label {
   font-weight: 700;
 }
 
+.checkbox-group {
+  color: #2b3138;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.checkbox-group p {
+  margin: 0 0 8px;
+}
+
+.checkbox-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.checkbox-group label {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.checkbox-group input {
+  margin: 0;
+  width: auto;
+}
+
 .page-shell {
   margin: 0 auto;
   max-width: 1180px;

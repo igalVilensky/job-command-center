@@ -18,8 +18,13 @@ type Profile = {
   aiSkills: string[];
   avoidSkills: string[];
   minimumSalaryEur: number | null;
+  salaryMinEur: number | null;
+  salaryMaxEur: number | null;
+  acceptableRemoteTypes: string[];
   preferredLocations: string[];
   remotePreference: string | null;
+  locationNotes: string | null;
+  salaryNotes: string | null;
   germanLevel: string | null;
   englishLevel: string | null;
   languagesJson: Record<string, string> | null;
@@ -131,9 +136,12 @@ type ProfileFormState = {
   engineeringSkills: string;
   aiSkills: string;
   avoidSkills: string;
-  minimumSalaryEur: string;
+  salaryMinEur: string;
+  salaryMaxEur: string;
+  salaryNotes: string;
+  acceptableRemoteTypes: string[];
   preferredLocations: string;
-  remotePreference: string;
+  locationNotes: string;
   germanLevel: string;
   englishLevel: string;
   languages: string;
@@ -204,9 +212,12 @@ const emptyProfileForm: ProfileFormState = {
   engineeringSkills: "",
   aiSkills: "",
   avoidSkills: "",
-  minimumSalaryEur: "",
+  salaryMinEur: "",
+  salaryMaxEur: "",
+  salaryNotes: "",
+  acceptableRemoteTypes: [],
   preferredLocations: "",
-  remotePreference: "",
+  locationNotes: "",
   germanLevel: "",
   englishLevel: "",
   languages: "",
@@ -276,6 +287,24 @@ const remoteTypeOptions = [
   "onsite"
 ];
 
+const profileRemoteTypeOptions = [
+  "remote",
+  "remote_first",
+  "hybrid",
+  "homeoffice_possible",
+  "onsite",
+  "unknown"
+];
+
+const remoteTypeLabels: Record<string, string> = {
+  remote: "Remote",
+  remote_first: "Remote-first",
+  hybrid: "Hybrid",
+  homeoffice_possible: "Homeoffice possible",
+  onsite: "Onsite",
+  unknown: "Unknown / clarify"
+};
+
 const userDecisionOptions = [
   "undecided",
   "interested",
@@ -340,9 +369,12 @@ const profileToForm = (profile: Profile): ProfileFormState => ({
   engineeringSkills: listToText(profile.engineeringSkills),
   aiSkills: listToText(profile.aiSkills),
   avoidSkills: listToText(profile.avoidSkills),
-  minimumSalaryEur: profile.minimumSalaryEur ? String(profile.minimumSalaryEur) : "",
+  salaryMinEur: profile.salaryMinEur ? String(profile.salaryMinEur) : "",
+  salaryMaxEur: profile.salaryMaxEur ? String(profile.salaryMaxEur) : "",
+  salaryNotes: profile.salaryNotes ?? "",
+  acceptableRemoteTypes: profile.acceptableRemoteTypes,
   preferredLocations: listToText(profile.preferredLocations),
-  remotePreference: profile.remotePreference ?? "",
+  locationNotes: profile.locationNotes ?? "",
   germanLevel: profile.germanLevel ?? "",
   englishLevel: profile.englishLevel ?? "",
   languages: languagesToText(profile.languagesJson),
@@ -630,11 +662,25 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setError("");
     setStatus("");
 
-    const salaryText = profileForm.minimumSalaryEur.trim();
-    const salary = salaryText ? Number(salaryText) : null;
+    const salaryMinText = profileForm.salaryMinEur.trim();
+    const salaryMaxText = profileForm.salaryMaxEur.trim();
+    const salaryMin = salaryMinText ? Number(salaryMinText) : null;
+    const salaryMax = salaryMaxText ? Number(salaryMaxText) : null;
 
-    if (salary !== null && (!Number.isInteger(salary) || salary <= 0)) {
-      setError("Minimum salary must be a positive integer");
+    if (salaryMin !== null && (!Number.isInteger(salaryMin) || salaryMin <= 0)) {
+      setError("Desired salary min must be a positive integer");
+      setIsBusy(false);
+      return;
+    }
+
+    if (salaryMax !== null && (!Number.isInteger(salaryMax) || salaryMax <= 0)) {
+      setError("Desired salary max must be a positive integer");
+      setIsBusy(false);
+      return;
+    }
+
+    if (salaryMin !== null && salaryMax !== null && salaryMin > salaryMax) {
+      setError("Desired salary min must be less than or equal to desired salary max");
       setIsBusy(false);
       return;
     }
@@ -651,9 +697,14 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           engineeringSkills: textToList(profileForm.engineeringSkills),
           aiSkills: textToList(profileForm.aiSkills),
           avoidSkills: textToList(profileForm.avoidSkills),
-          minimumSalaryEur: salary,
+          minimumSalaryEur: null,
+          salaryMinEur: salaryMin,
+          salaryMaxEur: salaryMax,
+          salaryNotes: profileForm.salaryNotes.trim() || null,
+          acceptableRemoteTypes: profileForm.acceptableRemoteTypes,
           preferredLocations: textToList(profileForm.preferredLocations),
-          remotePreference: profileForm.remotePreference.trim() || null,
+          remotePreference: null,
+          locationNotes: profileForm.locationNotes.trim() || null,
           germanLevel: profileForm.germanLevel.trim() || null,
           englishLevel: profileForm.englishLevel.trim() || null,
           languagesJson: textToLanguages(profileForm.languages),
@@ -1094,10 +1145,22 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
-  const updateProfileField = (field: keyof ProfileFormState, value: string) => {
+  const updateProfileField = (
+    field: Exclude<keyof ProfileFormState, "acceptableRemoteTypes">,
+    value: string
+  ) => {
     setProfileForm((current) => ({
       ...current,
       [field]: value
+    }));
+  };
+
+  const toggleAcceptableRemoteType = (remoteType: string) => {
+    setProfileForm((current) => ({
+      ...current,
+      acceptableRemoteTypes: current.acceptableRemoteTypes.includes(remoteType)
+        ? current.acceptableRemoteTypes.filter((item) => item !== remoteType)
+        : [...current.acceptableRemoteTypes, remoteType]
     }));
   };
 
@@ -1265,8 +1328,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               </div>
               <p className="muted">
                 Save CV and update profile from CV refreshes parsed CV-backed fields like
-                profession, bio, roles, skills, languages, experience, and CV-detected locations.
-                Salary expectations, avoid skills, and remote preference stay manual.
+                profession, bio, roles, skills, languages, and experience.
+                Job-search preferences such as salary range, remote modes, locations, and avoid
+                skills stay manual.
               </p>
               <div className="form-grid">
                 <label>
@@ -1310,12 +1374,40 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               <div className="section-heading">
                 <h3>Candidate Summary</h3>
               </div>
+              <p className="muted">
+                The CV source describes your background. Preferences below are used as filters for
+                scoring jobs.
+              </p>
               <div className="form-grid">
                 <label>
                   Profession
                   <input
                     value={profileForm.profession}
                     onChange={(event) => updateProfileField("profession", event.target.value)}
+                  />
+                </label>
+                <label>
+                  Desired salary min EUR
+                  <input
+                    value={profileForm.salaryMinEur}
+                    onChange={(event) => updateProfileField("salaryMinEur", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label>
+                  Desired salary max EUR
+                  <input
+                    value={profileForm.salaryMaxEur}
+                    onChange={(event) => updateProfileField("salaryMaxEur", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label className="wide">
+                  Salary notes
+                  <textarea
+                    value={profileForm.salaryNotes}
+                    onChange={(event) => updateProfileField("salaryNotes", event.target.value)}
+                    rows={3}
                   />
                 </label>
                 <label>
@@ -1327,21 +1419,29 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                     }
                   />
                 </label>
-                <label>
-                  Minimum salary EUR
-                  <input
-                    value={profileForm.minimumSalaryEur}
-                    onChange={(event) => updateProfileField("minimumSalaryEur", event.target.value)}
-                    inputMode="numeric"
+                <label className="wide">
+                  Location notes
+                  <textarea
+                    value={profileForm.locationNotes}
+                    onChange={(event) => updateProfileField("locationNotes", event.target.value)}
+                    rows={3}
                   />
                 </label>
-                <label>
-                  Remote preference
-                  <input
-                    value={profileForm.remotePreference}
-                    onChange={(event) => updateProfileField("remotePreference", event.target.value)}
-                  />
-                </label>
+                <div className="wide checkbox-group">
+                  <p>Acceptable remote types</p>
+                  <div>
+                    {profileRemoteTypeOptions.map((option) => (
+                      <label key={option}>
+                        <input
+                          checked={profileForm.acceptableRemoteTypes.includes(option)}
+                          onChange={() => toggleAcceptableRemoteType(option)}
+                          type="checkbox"
+                        />
+                        {remoteTypeLabels[option]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <label>
                   German level
                   <input

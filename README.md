@@ -233,7 +233,7 @@ curl -i -b /tmp/jobcc-cookies.txt \
 
 Profile checks:
 
-`POST /profile/cv` saves Typst/plain CV source and refreshes parsed CV-backed fields such as profession, bio, target roles, skills, language levels, experience summary, and CV-detected locations. It does not infer salary expectations, avoid skills, or remote preference; edit those manually through `PUT /profile` or the profile form after CV extraction.
+`POST /profile/cv` saves Typst/plain CV source and refreshes parsed CV-backed fields such as profession, bio, target roles, skills, language levels, and experience summary. It does not infer salary range, acceptable remote modes, preferred locations, avoid skills, or preference notes; edit those manually through `PUT /profile` or the profile form after CV extraction.
 
 ```bash
 curl -i -c /tmp/jobcc-cookies.txt \
@@ -251,7 +251,7 @@ curl -i -b /tmp/jobcc-cookies.txt \
 curl -i -b /tmp/jobcc-cookies.txt \
   -H "Content-Type: application/json" \
   -X PUT \
-  -d '{"targetRoles":["Backend Engineer"],"strongSkills":["TypeScript","Node.js"],"avoidSkills":["Cold calling"],"minimumSalaryEur":70000,"preferredLocations":["Berlin","Remote"],"remotePreference":"hybrid","germanLevel":"B1","englishLevel":"C1","profileNotes":"Prefers product engineering roles."}' \
+  -d '{"targetRoles":["Frontend Developer","Full-Stack Software Developer"],"strongSkills":["TypeScript","React","Vue","Node.js"],"avoidSkills":["Cold calling"],"salaryMinEur":48000,"salaryMaxEur":55000,"acceptableRemoteTypes":["remote","remote_first","hybrid","homeoffice_possible","onsite"],"preferredLocations":["Leipzig","Remote","Germany"],"locationNotes":"Open to onsite or hybrid depending on city and context.","salaryNotes":"Target range is 48000-55000 EUR.","germanLevel":"B2","englishLevel":"C1","profileNotes":"Prefers product engineering roles."}' \
   http://127.0.0.1:4000/profile
 
 curl -i -b /tmp/jobcc-cookies.txt http://127.0.0.1:4000/profile
