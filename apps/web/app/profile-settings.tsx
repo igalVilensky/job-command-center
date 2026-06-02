@@ -55,6 +55,21 @@ type JobDescription = {
   language: string | null;
 };
 
+type FitBreakdownItem = {
+  score: number;
+  verdict: "strong" | "medium" | "weak" | "unknown";
+  notes: string;
+};
+
+type FitBreakdown = {
+  skills: FitBreakdownItem;
+  salary: FitBreakdownItem;
+  locationRemote: FitBreakdownItem;
+  language: FitBreakdownItem;
+  seniority: FitBreakdownItem;
+  sourceQuality: FitBreakdownItem;
+};
+
 type AiReview = {
   id: string;
   score: number;
@@ -63,6 +78,7 @@ type AiReview = {
   riskFlags: string[];
   cvAngle: string;
   clarificationQuestions: string[];
+  fitBreakdownJson?: FitBreakdown | null;
   createdAt: string;
 };
 
@@ -327,6 +343,15 @@ const applicationStatusOptions = [
   "offer",
   "accepted",
   "declined"
+];
+
+const fitBreakdownRows: { key: keyof FitBreakdown; label: string }[] = [
+  { key: "skills", label: "Skills" },
+  { key: "salary", label: "Salary" },
+  { key: "locationRemote", label: "Location / Remote" },
+  { key: "language", label: "Language" },
+  { key: "seniority", label: "Seniority" },
+  { key: "sourceQuality", label: "Source quality" }
 ];
 
 const listToText = (items: string[]) => items.join(", ");
@@ -2371,7 +2396,43 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                               <dd>{selectedJob.latestAiReview.decision}</dd>
                             </div>
                           </dl>
+                          <p className="muted">
+                            Overall score and decision are the final result. Fit breakdown shows
+                            dimension-level reasoning.
+                          </p>
                           <p>{selectedJob.latestAiReview.reviewText}</p>
+                          <h5>Fit Breakdown</h5>
+                          {selectedJob.latestAiReview.fitBreakdownJson ? (
+                            <div className="fit-breakdown-grid">
+                              {fitBreakdownRows.map(({ key, label }) => {
+                                const item = selectedJob.latestAiReview?.fitBreakdownJson?.[key];
+
+                                if (!item) {
+                                  return null;
+                                }
+
+                                return (
+                                  <div className="fit-breakdown-card" key={key}>
+                                    <div className="fit-breakdown-heading">
+                                      <strong>{label}</strong>
+                                      <span className={`fit-verdict ${item.verdict}`}>
+                                        {item.verdict}
+                                      </span>
+                                    </div>
+                                    <div className="fit-breakdown-score">{item.score}</div>
+                                    <p>{item.notes}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="muted">No fit breakdown for this review.</p>
+                          )}
+                          {selectedJob.sourceQuality !== "full_description" ? (
+                            <p className="muted">
+                              Review may be less reliable until job is enriched.
+                            </p>
+                          ) : null}
                           <h5>Risk flags</h5>
                           {selectedJob.latestAiReview.riskFlags.length > 0 ? (
                             <ul className="compact-list">

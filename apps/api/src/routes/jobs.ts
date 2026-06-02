@@ -374,6 +374,11 @@ jobsRouter.post(
             riskFlags: reviewResponse.riskFlags,
             cvAngle: reviewResponse.cvAngle,
             clarificationQuestions: reviewResponse.clarificationQuestions,
+            ...(reviewResponse.fitBreakdown
+              ? {
+                  fitBreakdownJson: reviewResponse.fitBreakdown
+                }
+              : {}),
             rawResponseJson: reviewResponse
           }
         });

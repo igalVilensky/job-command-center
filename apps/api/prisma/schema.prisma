@@ -204,6 +204,7 @@ model AiReview {
   riskFlags              String[] @default([])
   cvAngle                String
   clarificationQuestions String[] @default([])
+  fitBreakdownJson       Json?
   rawResponseJson        Json?
   createdAt              DateTime @default(now())
 

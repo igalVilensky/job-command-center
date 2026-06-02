@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 10 manual job detail enrichment phase.
+This project is currently in the Milestone 11 review fit breakdown phase.
 
 ## Existing prototype
 
@@ -64,6 +64,9 @@ Milestone 01 project skeleton has been created.
 - AI job review receives the richer structured profile and active CV context instead of relying only on shallow seed skills.
 - Review prompting treats React/Angular/Next, Vue/Nuxt, TypeScript/JavaScript, Node/Express, REST APIs, testing/QA, CI/CD, and SaaS/product work as related JS/TS ecosystem skills when the profile supports that.
 - Review prompting uses salary range overlap logic, so a job range such as 43000-66000 EUR is not below target for a 48000-55000 EUR candidate range.
+- AI job reviews now include a structured fit breakdown for skills, salary, location/remote, language, seniority, and source quality.
+- New AI reviews store the breakdown in `AiReview.fitBreakdownJson`; older reviews may not have this field populated and still render.
+- The fit breakdown supports review debugging and user trust while the top-level score and decision remain the final recommendation.
 - `apps/web` has a minimal demo-login candidate profile editor.
 - Job inbox Prisma models exist:
   - `JobSource`

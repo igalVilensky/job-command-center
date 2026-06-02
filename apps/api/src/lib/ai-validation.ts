@@ -12,6 +12,15 @@ const remoteTypes = new Set([
 const sourceQualities = new Set(["full_description", "digest_summary", "email_summary", "unknown"]);
 const confidenceValues = new Set(["high", "medium", "low"]);
 const reviewDecisions = new Set(["apply", "maybe", "skip", "review_manually"]);
+const fitBreakdownVerdicts = new Set(["strong", "medium", "weak", "unknown"]);
+const fitBreakdownCategories = [
+  "skills",
+  "salary",
+  "locationRemote",
+  "language",
+  "seniority",
+  "sourceQuality"
+] as const;
 
 export type ExtractJobsBody = {
   sourceText: string;
@@ -41,6 +50,14 @@ export type AiExtractionResponse = {
   warnings: string[];
 };
 
+export type AiFitBreakdownItem = {
+  score: number;
+  verdict: "strong" | "medium" | "weak" | "unknown";
+  notes: string;
+};
+
+export type AiFitBreakdown = Record<(typeof fitBreakdownCategories)[number], AiFitBreakdownItem>;
+
 export type AiReviewResponse = {
   score: number;
   decision: string;
@@ -48,6 +65,7 @@ export type AiReviewResponse = {
   riskFlags: string[];
   cvAngle: string;
   clarificationQuestions: string[];
+  fitBreakdown: AiFitBreakdown | null;
   confidence: string;
 };
 
@@ -154,6 +172,41 @@ const aiScore = (value: unknown) => {
   return value;
 };
 
+const aiNamedScore = (value: unknown, field: string) => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
+    throw new Error(`AI response ${field} must be an integer between 0 and 100`);
+  }
+
+  return value;
+};
+
+const validateFitBreakdownItem = (value: unknown, field: string): AiFitBreakdownItem => {
+  if (!isPlainObject(value)) {
+    throw new Error(`AI response ${field} must be an object`);
+  }
+
+  return {
+    score: aiNamedScore(value.score, `${field}.score`),
+    verdict: aiEnum(value.verdict, `${field}.verdict`, fitBreakdownVerdicts) as AiFitBreakdownItem["verdict"],
+    notes: requiredAiString(value.notes, `${field}.notes`)
+  };
+};
+
+const validateFitBreakdown = (value: unknown): AiFitBreakdown | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isPlainObject(value)) {
+    throw new Error("AI response fitBreakdown must be an object");
+  }
+
+  return fitBreakdownCategories.reduce((breakdown, category) => {
+    breakdown[category] = validateFitBreakdownItem(value[category], `fitBreakdown.${category}`);
+    return breakdown;
+  }, {} as AiFitBreakdown);
+};
+
 const validateAiUrl = (value: string) => {
   if (!value) {
     return value;
@@ -240,6 +293,7 @@ export const validateReviewResponse = (body: unknown): AiReviewResponse => {
     riskFlags: aiStringArray(body.riskFlags, "riskFlags"),
     cvAngle: requiredAiString(body.cvAngle, "cvAngle"),
     clarificationQuestions: aiStringArray(body.clarificationQuestions, "clarificationQuestions"),
+    fitBreakdown: validateFitBreakdown(body.fitBreakdown),
     confidence: aiEnum(body.confidence, "confidence", confidenceValues)
   };
 };

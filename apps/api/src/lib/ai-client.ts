@@ -4,7 +4,7 @@ const MOCK_AI_MODEL = "mock-ai-v1";
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
 export const EXTRACT_PROMPT_VERSION = "extract_jobs_v1";
-export const REVIEW_PROMPT_VERSION = "review_job_v1";
+export const REVIEW_PROMPT_VERSION = "review_job_v2";
 
 const configuredProvider = () => process.env.AI_PROVIDER?.trim().toLowerCase() || "mock";
 

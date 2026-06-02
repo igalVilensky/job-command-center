@@ -199,6 +199,259 @@ def _salary_preferences(profile: dict[str, Any]) -> tuple[int | None, int | None
     return salary_min, salary_max
 
 
+def _fit_item(score: int, verdict: str, notes: str) -> dict[str, object]:
+    return {
+        "score": max(0, min(100, score)),
+        "verdict": verdict,
+        "notes": notes,
+    }
+
+
+def _format_salary_range(salary_min: int | None, salary_max: int | None) -> str:
+    if salary_min and salary_max:
+        return f"{salary_min}-{salary_max} EUR"
+    if salary_min:
+        return f"from {salary_min} EUR"
+    if salary_max:
+        return f"up to {salary_max} EUR"
+    return "unknown"
+
+
+def _profile_text(profile: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in [
+        "profession",
+        "bio",
+        "targetRoles",
+        "strongSkills",
+        "secondarySkills",
+        "engineeringSkills",
+        "aiSkills",
+        "experienceSummary",
+        "profileNotes",
+    ]:
+        value = profile.get(key)
+        if isinstance(value, list):
+            parts.extend(str(item) for item in value)
+        elif value:
+            parts.append(str(value))
+
+    active_cv = profile.get("activeCv")
+    if isinstance(active_cv, dict):
+        parts.append(str(active_cv.get("sourceText") or ""))
+
+    return " ".join(parts).lower()
+
+
+def _contains_any(text: str, terms: set[str]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _salary_fit(
+    profile_salary_min: int | None,
+    profile_salary_max: int | None,
+    job_salary_min: int | None,
+    job_salary_max: int | None,
+) -> dict[str, object]:
+    candidate_range = _format_salary_range(profile_salary_min, profile_salary_max)
+    job_range = _format_salary_range(job_salary_min, job_salary_max)
+
+    if not profile_salary_min and not profile_salary_max:
+        return _fit_item(50, "unknown", "Candidate salary target is not set.")
+
+    if not job_salary_min and not job_salary_max:
+        return _fit_item(50, "unknown", f"Job salary is missing; clarify against target {candidate_range}.")
+
+    if profile_salary_min and job_salary_max and job_salary_max < profile_salary_min:
+        return _fit_item(
+            25,
+            "weak",
+            f"Job salary {job_range} is below candidate target {candidate_range}.",
+        )
+
+    if profile_salary_max and job_salary_min and job_salary_min > profile_salary_max:
+        return _fit_item(
+            85,
+            "strong",
+            f"Job salary {job_range} starts above target {candidate_range}.",
+        )
+
+    if (
+        profile_salary_min
+        and profile_salary_max
+        and job_salary_min
+        and job_salary_max
+        and job_salary_max >= profile_salary_min
+        and job_salary_min <= profile_salary_max
+    ):
+        return _fit_item(
+            85,
+            "strong",
+            f"Job salary {job_range} overlaps candidate target {candidate_range}.",
+        )
+
+    if profile_salary_min and job_salary_max and job_salary_max >= profile_salary_min:
+        return _fit_item(70, "medium", f"Job salary {job_range} reaches target {candidate_range}.")
+
+    return _fit_item(55, "unknown", f"Salary needs clarification: job {job_range}, target {candidate_range}.")
+
+
+def _skills_fit(
+    profile: dict[str, Any],
+    job_text: str,
+    overlap_words: list[str],
+    avoid_hits: list[str],
+) -> dict[str, object]:
+    lowered_job = job_text.lower()
+    lowered_profile = _profile_text(profile)
+    js_ts_terms = {
+        "typescript",
+        "javascript",
+        "react",
+        "angular",
+        "vue",
+        "nuxt",
+        "next",
+        "node",
+        "frontend",
+        "front-end",
+        "full-stack",
+    }
+    frontend_terms = {"react", "angular", "vue", "nuxt", "next", "frontend", "front-end"}
+
+    if avoid_hits:
+        return _fit_item(35, "weak", f"Role mentions avoided areas: {', '.join(avoid_hits[:4])}.")
+
+    if (
+        _contains_any(lowered_profile, js_ts_terms)
+        and "typescript" in lowered_job
+        and _contains_any(lowered_job, frontend_terms)
+    ):
+        return _fit_item(90, "strong", "TypeScript frontend stack aligns with the JS/TS profile.")
+
+    if len(overlap_words) >= 4:
+        return _fit_item(82, "strong", f"Several profile terms match: {', '.join(overlap_words[:5])}.")
+
+    if len(overlap_words) >= 2:
+        return _fit_item(66, "medium", f"Some profile terms match: {', '.join(overlap_words[:4])}.")
+
+    return _fit_item(35, "weak", "Few concrete profile skills appear in the job text.")
+
+
+def _location_remote_fit(profile: dict[str, Any], job: dict[str, Any]) -> dict[str, object]:
+    remote_type = str(job.get("remoteType") or "unknown")
+    location = str(job.get("location") or "").strip()
+    accepted = {
+        str(item)
+        for item in profile.get("acceptableRemoteTypes", [])
+        if str(item).strip()
+    }
+    preferred = [
+        str(item).lower()
+        for item in profile.get("preferredLocations", [])
+        if str(item).strip()
+    ]
+    location_lower = location.lower()
+    location_matches = bool(location_lower and any(item in location_lower for item in preferred))
+
+    if remote_type == "unknown":
+        return _fit_item(55, "unknown", "Remote policy is unknown; clarify before treating location as a blocker.")
+
+    if remote_type in {"remote", "remote_first"} and remote_type in accepted:
+        return _fit_item(88, "strong", f"{remote_type} is accepted by the candidate.")
+
+    if remote_type in accepted and (location_matches or not location):
+        return _fit_item(78, "strong", f"{remote_type} is accepted and location has no clear blocker.")
+
+    if remote_type in accepted:
+        return _fit_item(65, "medium", f"{remote_type} is accepted; confirm commute or location fit for {location or 'the role'}.")
+
+    if remote_type == "onsite":
+        return _fit_item(35, "weak", f"Onsite role in {location or 'an unknown location'} may conflict with preferences.")
+
+    return _fit_item(50, "unknown", f"Remote type {remote_type} needs clarification against preferences.")
+
+
+def _language_fit(profile: dict[str, Any], job_text: str) -> dict[str, object]:
+    lowered = job_text.lower()
+    german_level = str(profile.get("germanLevel") or "").strip().upper()
+
+    hard_german = any(term in lowered for term in ["native german", "german native", "deutsch muttersprache"])
+    c1_german = "german c1" in lowered or "deutsch c1" in lowered or " c1 deutsch" in lowered
+    fluent_german = any(term in lowered for term in ["fluent german", "fließend deutsch", "fliessend deutsch"])
+    german_required = hard_german or c1_german or fluent_german or "german" in lowered or "deutsch" in lowered
+
+    if not german_required:
+        return _fit_item(60, "unknown", "No explicit German requirement found.")
+
+    if hard_german or c1_german:
+        if german_level in {"C1", "C2", "NATIVE", "MUTTERSPRACHE"}:
+            return _fit_item(90, "strong", f"German level {german_level} matches the explicit requirement.")
+        return _fit_item(35, "weak", f"Role appears to require C1/native German; profile has {german_level or 'unknown'}.")
+
+    if fluent_german and german_level == "B2":
+        return _fit_item(62, "medium", "German B2 may satisfy fluent German, but clarify whether C1 is expected.")
+
+    if german_level in {"B2", "C1", "C2", "NATIVE", "MUTTERSPRACHE"}:
+        return _fit_item(75, "medium", f"German requirement appears compatible with profile level {german_level}.")
+
+    return _fit_item(45, "unknown", "German requirement found, but candidate level is unclear.")
+
+
+def _seniority_fit(profile: dict[str, Any], job_text: str) -> dict[str, object]:
+    lowered_job = job_text.lower()
+    lowered_profile = _profile_text(profile)
+    senior_role = any(term in lowered_job for term in ["senior", "lead", "principal", "staff"])
+    junior_role = any(term in lowered_job for term in ["junior", "entry level", "entry-level"])
+    candidate_experienced = any(
+        term in lowered_profile
+        for term in ["full-stack", "full stack", "production", "experience", "senior", "lead"]
+    )
+
+    if senior_role and candidate_experienced:
+        return _fit_item(68, "medium", "Senior wording appears plausible but should be checked against years and scope.")
+
+    if senior_role:
+        return _fit_item(45, "unknown", "Role seniority appears high; candidate seniority evidence is unclear.")
+
+    if junior_role and candidate_experienced:
+        return _fit_item(55, "medium", "Role may be below the candidate's current experience level.")
+
+    return _fit_item(60, "unknown", "No explicit seniority blocker found in the available text.")
+
+
+def _source_quality_fit(source_quality: str, job_text: str) -> dict[str, object]:
+    if source_quality == "full_description":
+        return _fit_item(92, "strong", "Full job description is available for this review.")
+
+    if len(job_text) < 180:
+        return _fit_item(35, "weak", "Source text is short, so the review is less reliable.")
+
+    return _fit_item(50, "unknown", f"Source quality is {source_quality}; enrich with the full description if possible.")
+
+
+def _build_fit_breakdown(
+    candidate_profile: dict[str, Any],
+    job: dict[str, Any],
+    job_text: str,
+    overlap_words: list[str],
+    avoid_hits: list[str],
+    profile_salary_min: int | None,
+    profile_salary_max: int | None,
+    job_salary_min: int | None,
+    job_salary_max: int | None,
+    source_quality: str,
+) -> dict[str, object]:
+    return {
+        "skills": _skills_fit(candidate_profile, job_text, overlap_words, avoid_hits),
+        "salary": _salary_fit(profile_salary_min, profile_salary_max, job_salary_min, job_salary_max),
+        "locationRemote": _location_remote_fit(candidate_profile, job),
+        "language": _language_fit(candidate_profile, job_text),
+        "seniority": _seniority_fit(candidate_profile, job_text),
+        "sourceQuality": _source_quality_fit(source_quality, job_text),
+    }
+
+
 class MockProvider:
     name = "mock"
     model = "mock-ai-v1"
@@ -298,6 +551,15 @@ class MockProvider:
         elif salary_min and salary_max and isinstance(job_salary_min, int) and job_salary_min > salary_max:
             clarification_questions.append("The salary range appears above the target range; confirm expectations.")
 
+        if str(job.get("remoteType") or "unknown") == "unknown":
+            clarification_questions.append("What remote or hybrid policy is available for this role?")
+
+        if (
+            str(candidate_profile.get("germanLevel") or "").strip().upper() == "B2"
+            and any(term in job_text.lower() for term in ["fluent german", "fließend deutsch", "fliessend deutsch"])
+        ):
+            clarification_questions.append("Does fluent German mean B2 is acceptable, or is C1/native expected?")
+
         if avoid_hits:
             risk_flags.append(f"Role mentions avoided skill area: {', '.join(avoid_hits)}.")
 
@@ -319,6 +581,20 @@ class MockProvider:
         title = str(job.get("title") or "this role")
         company = str(job.get("company") or "the company")
         matched = ", ".join(overlap_words[:6]) if overlap_words else "general product engineering experience"
+        normalized_job_salary_min = job_salary_min if isinstance(job_salary_min, int) else None
+        normalized_job_salary_max = job_salary_max if isinstance(job_salary_max, int) else None
+        fit_breakdown = _build_fit_breakdown(
+            candidate_profile=candidate_profile,
+            job=job,
+            job_text=job_text,
+            overlap_words=overlap_words,
+            avoid_hits=avoid_hits,
+            profile_salary_min=salary_min,
+            profile_salary_max=salary_max,
+            job_salary_min=normalized_job_salary_min,
+            job_salary_max=normalized_job_salary_max,
+            source_quality=source_quality,
+        )
 
         return {
             "score": score,
@@ -330,5 +606,6 @@ class MockProvider:
             "riskFlags": risk_flags,
             "cvAngle": f"Emphasize {matched} and recent outcomes that map directly to {title}.",
             "clarificationQuestions": clarification_questions,
+            "fitBreakdown": fit_breakdown,
             "confidence": confidence,
         }

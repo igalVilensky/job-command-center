@@ -52,6 +52,21 @@ class ReviewJobRequest(BaseModel):
     description: dict[str, Any] | None = None
 
 
+class FitBreakdownItem(BaseModel):
+    score: int = Field(ge=0, le=100)
+    verdict: Literal["strong", "medium", "weak", "unknown"]
+    notes: str = Field(min_length=1)
+
+
+class FitBreakdown(BaseModel):
+    skills: FitBreakdownItem
+    salary: FitBreakdownItem
+    locationRemote: FitBreakdownItem
+    language: FitBreakdownItem
+    seniority: FitBreakdownItem
+    sourceQuality: FitBreakdownItem
+
+
 class ReviewJobResponse(BaseModel):
     score: int
     decision: Literal["apply", "maybe", "skip", "review_manually"]
@@ -59,6 +74,7 @@ class ReviewJobResponse(BaseModel):
     riskFlags: list[str]
     cvAngle: str
     clarificationQuestions: list[str]
+    fitBreakdown: FitBreakdown | None = None
     confidence: Literal["high", "medium", "low"]
 
 

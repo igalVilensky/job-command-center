@@ -158,8 +158,11 @@ Manual enrichment stores the pasted full job description in `full_text`. The cur
 - risk_flags
 - cv_angle
 - clarification_questions
+- fit_breakdown_json
 - raw_response_json
 - created_at
+
+`fit_breakdown_json` stores the normalized structured review breakdown for skills, salary, location/remote, language, seniority, and source quality. Older reviews may have `null` here because the field was added after the original review schema.
 
 ## Application
 

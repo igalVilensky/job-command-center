@@ -20,6 +20,15 @@ REMOTE_TYPES = {
 SOURCE_QUALITIES = {"full_description", "partial_description", "digest_summary", "email_summary", "unknown"}
 CONFIDENCE_VALUES = {"high", "medium", "low"}
 REVIEW_DECISIONS = {"apply", "maybe", "skip", "review_manually"}
+FIT_BREAKDOWN_VERDICTS = {"strong", "medium", "weak", "unknown"}
+FIT_BREAKDOWN_KEYS = (
+    "skills",
+    "salary",
+    "locationRemote",
+    "language",
+    "seniority",
+    "sourceQuality",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +64,38 @@ REVIEW_SCHEMA_EXAMPLE = {
     "riskFlags": ["Potential stack mismatch", "Confirm salary expectations"],
     "cvAngle": "Lead with matching web application work, then address stack gaps directly.",
     "clarificationQuestions": ["Is the role product-focused or agency/client-project based?"],
+    "fitBreakdown": {
+        "skills": {
+            "score": 72,
+            "verdict": "medium",
+            "notes": "Web application experience matches, but one stack detail needs confirmation.",
+        },
+        "salary": {
+            "score": 60,
+            "verdict": "unknown",
+            "notes": "Salary range is missing and should be clarified against the candidate target.",
+        },
+        "locationRemote": {
+            "score": 65,
+            "verdict": "medium",
+            "notes": "Remote work is mentioned, but the exact onsite expectation is unclear.",
+        },
+        "language": {
+            "score": 60,
+            "verdict": "medium",
+            "notes": "German requirement may fit B2, but clarify whether C1 is expected.",
+        },
+        "seniority": {
+            "score": 70,
+            "verdict": "medium",
+            "notes": "Seniority appears plausible from the available profile and job context.",
+        },
+        "sourceQuality": {
+            "score": 90,
+            "verdict": "strong",
+            "notes": "Full job description is available for the review.",
+        },
+    },
     "confidence": "medium",
 }
 
@@ -65,6 +106,7 @@ EXPECTED_REVIEW_KEYS = (
     "riskFlags",
     "cvAngle",
     "clarificationQuestions",
+    "fitBreakdown",
     "confidence",
 )
 SCORE_BY_DECISION = {
@@ -184,6 +226,61 @@ def _score(value: Any) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > 100:
         raise ProviderError("review.score must be an integer between 0 and 100", 502)
     return value
+
+
+def _score_field(value: Any, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > 100:
+        raise ProviderError(f"{label} must be an integer between 0 and 100", 502)
+    return value
+
+
+def _non_empty_string(value: Any, label: str) -> str:
+    text = _string(value, label)
+    if not text:
+        raise ProviderError(f"{label} must be a non-empty string", 502)
+    return text
+
+
+def _normalize_fit_breakdown_item(value: Any, label: str) -> dict[str, object]:
+    item = _object(value, label)
+
+    return {
+        "score": _score_field(_required(item, "score", label), f"{label}.score"),
+        "verdict": _enum(_required(item, "verdict", label), f"{label}.verdict", FIT_BREAKDOWN_VERDICTS),
+        "notes": _non_empty_string(_required(item, "notes", label), f"{label}.notes"),
+    }
+
+
+def _normalize_fit_breakdown(value: Any) -> dict[str, object]:
+    breakdown = _object(value, "review.fitBreakdown")
+
+    return {
+        key: _normalize_fit_breakdown_item(
+            _required(breakdown, key, "review.fitBreakdown"),
+            f"review.fitBreakdown.{key}",
+        )
+        for key in FIT_BREAKDOWN_KEYS
+    }
+
+
+def _fallback_fit_breakdown(score: int) -> dict[str, object]:
+    if score >= 75:
+        verdict = "strong"
+    elif score >= 50:
+        verdict = "medium"
+    elif score >= 30:
+        verdict = "weak"
+    else:
+        verdict = "unknown"
+
+    return {
+        key: {
+            "score": score,
+            "verdict": verdict,
+            "notes": "Provider omitted this dimension; inspect the overall review before deciding.",
+        }
+        for key in FIT_BREAKDOWN_KEYS
+    }
 
 
 def _boolean(value: Any, label: str) -> bool:
@@ -354,6 +451,12 @@ def _normalize_review(payload: dict[str, Any]) -> dict[str, object]:
 
     fallback_fields = []
     empty_fields = []
+    if "fitBreakdown" in payload and payload["fitBreakdown"] is not None:
+        fit_breakdown = _normalize_fit_breakdown(payload["fitBreakdown"])
+    else:
+        fit_breakdown = _fallback_fit_breakdown(score)
+        fallback_fields.append("fitBreakdown")
+
     if review_text is None:
         review_text = _fallback_review_text(decision, score)
         fallback_fields.append("review")
@@ -373,6 +476,7 @@ def _normalize_review(payload: dict[str, Any]) -> dict[str, object]:
         "riskFlags": risk_flags,
         "cvAngle": cv_angle,
         "clarificationQuestions": clarification_questions,
+        "fitBreakdown": fit_breakdown,
         "confidence": confidence,
     }
 
@@ -472,13 +576,14 @@ def _build_review_messages(
             "role": "user",
             "content": f"""
 Return exactly one JSON object with exactly these keys:
-score, decision, review, riskFlags, cvAngle, clarificationQuestions, confidence.
+score, decision, review, riskFlags, cvAngle, clarificationQuestions, fitBreakdown, confidence.
 Do not omit keys. Do not add keys.
 Compact valid example:
 {example}
 
 Allowed decision values: apply, maybe, skip, review_manually.
 Allowed confidence values: high, medium, low.
+Allowed fitBreakdown verdict values: strong, medium, weak, unknown.
 
 Decision guidance:
 - Use apply for strong technical fit and no major blockers.
@@ -490,21 +595,27 @@ Rules:
 - review must be a non-empty string with 2-4 sentences.
 - cvAngle must be a non-empty string.
 - score must be realistic; use 0 only for completely irrelevant jobs.
+- fitBreakdown must include skills, salary, locationRemote, language, seniority, and sourceQuality.
+- Each fitBreakdown category must include score, verdict, and notes.
+- Each category score must be an integer from 0 to 100.
+- Each category note must be short, concrete, and based on candidateProfile, job, or description evidence.
+- Keep fitBreakdown consistent with the top-level score and decision; do not make a skip decision when most dimensions are strong unless a major blocker is named.
 - Evaluate salary, location, remote policy, tech stack, and source completeness against candidateProfile preferences.
 - Mention concrete matching and mismatch signals from the job.
 - Put concrete salary, stack, agency/client-project, or source risks in riskFlags when present.
 - Prefer candidateProfile.salaryMinEur and candidateProfile.salaryMaxEur as the desired salary range. Treat candidateProfile.minimumSalaryEur as legacy fallback only when no salary range exists.
-- Use salary range overlap logic: if the job salary range overlaps the candidate range, do not flag "Salary below minimum" or similar salary-below-target risk.
+- Use salary range overlap logic in both the top-level review and fitBreakdown.salary: if the job salary range overlaps the candidate range, do not flag "Salary below minimum" or similar salary-below-target risk.
 - For example, candidate 48000-55000 EUR and job 43000-66000 EUR overlap and are salary-acceptable.
+- In that example, fitBreakdown.salary verdict must be at least medium and can be strong.
 - If the job maximum is below candidate salaryMinEur, salary is below target. If the job minimum is above candidate salaryMaxEur, salary exceeds target and is positive.
 - If salary is estimated, broad, or missing, mention uncertainty or ask a clarification question, but do not create a hard salary risk unless clearly below target.
 - Do not assume "Homeoffice möglich" means fully remote.
 - Candidate can accept multiple remote modes from candidateProfile.acceptableRemoteTypes. If job.remoteType is in that list, do not add a remote risk.
-- If job.remoteType is unknown, ask a clarification question instead of applying a heavy penalty.
+- If job.remoteType is unknown, fitBreakdown.locationRemote should be unknown or medium with a clarification note, not hard weak.
 - Do not treat location as blocker if remote-first or fully remote is clear or accepted by candidateProfile.acceptableRemoteTypes.
 - If the role is mandatory onsite and the city is outside candidateProfile.preferredLocations, treat location as a risk.
 - If the job location is a German city outside preferredLocations but candidateProfile includes Germany and accepts onsite/hybrid, ask whether commute/relocation works instead of auto-skipping unless the job explicitly forbids remote and the candidate disallows onsite.
-- Penalize explicit C1/native German if the candidate has a lower German level. Treat "fluent German" with candidate German B2 as a soft risk or clarification unless the job explicitly requires native/C1 German.
+- Penalize explicit C1/native German if the candidate has a lower German level. Treat "fluent German" with candidate German B2 as medium or clarification in fitBreakdown.language unless the job explicitly requires native/C1 German.
 - Treat short digest summaries as incomplete.
 - Treat the candidate as full-stack JS/TS when profile fields or CV context say so.
 - React, Angular, Next.js, Vue, Nuxt, TypeScript, JavaScript, React Native, Node.js, Express, REST APIs, SaaS/product work, and web application delivery are related JS/TS skills.
@@ -516,12 +627,13 @@ Rules:
 - For frontend-heavy roles, score based on frontend stack match, TypeScript/JavaScript match, product/SaaS relevance, salary, location, remote, German level, and seniority.
 - Backend-only non-JS stacks such as Java-only, PHP-only, or C#-only may be lower fit unless TypeScript/React/Angular/Vue/Node or relevant web/product skills are also present.
 - Do not treat Java as a blocker when it appears as company background or backend context but the role itself is frontend TypeScript/React/Angular.
-- If a full_description frontend role includes TypeScript plus React or Angular, it is a strong relevant match for a frontend/full-stack JS/TS candidate and should usually score above 60 unless there are major blockers.
+- If a full_description frontend role includes TypeScript plus React or Angular, fitBreakdown.skills should be strong for a frontend/full-stack JS/TS candidate and the overall score should usually be above 60 unless there are major blockers.
 - If a role includes React, Angular, Vue, Nuxt, Next, TypeScript, JavaScript, Node, REST APIs, SaaS/product, or web apps, it should usually be at least maybe unless there are major blockers.
 - Candidate German level must come from the profile; do not assume C1/native if the profile says B2.
 - Candidate is full-stack and has strong frontend experience when the profile says so.
 - Treat Homeoffice möglich as a clarification point, not an automatic skip.
 - If source is a short email/digest summary, recommend getting the full description instead of a harsh skip.
+- If job.sourceQuality is full_description, fitBreakdown.sourceQuality should usually be strong.
 - Skip only for serious blockers: explicit C1/native German above profile level, mandatory on-site/relocation far from preferred locations when onsite is not acceptable, clearly unrelated stack, salary clearly below target range with no overlap, or seniority mismatch.
 - AI review is advisory; the user decides.
 
@@ -583,7 +695,7 @@ class GroqProvider:
             description=description,
             max_description_chars=self.config.review_max_description_chars,
         )
-        response = self._chat_json(messages=messages, max_tokens=1400, label="Groq review response")
+        response = self._chat_json(messages=messages, max_tokens=2200, label="Groq review response")
         return _normalize_review(response)
 
     def _ensure_ready(self) -> None:
