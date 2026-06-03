@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 11 review fit breakdown phase.
+This project is currently in the Milestone 12 job queue and detail UX cleanup phase.
 
 ## Existing prototype
 
@@ -98,7 +98,11 @@ Milestone 01 project skeleton has been created.
 - Pipeline updates are scoped to the authenticated user and validate allowed user decision/application status values.
 - `appliedAt` and `rejectedAt` are auto-set when application status becomes `applied` or `rejected`.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
-- `apps/web` has a minimal demo-login candidate profile editor, paste import view, job inbox, manual job creation form, manual job enrichment form, AI review action, and application pipeline editor.
+- `apps/web` has a minimal demo-login candidate profile editor, combined import view, action-oriented job queue, focused job detail view, manual job enrichment form, AI review action, and application pipeline editor.
+- The web app primary navigation is now `Profile`, `Import`, and `Job Queue`.
+- The Job Queue groups active jobs by action state, including needs full description, ready for AI review, reviewed apply/strong matches, reviewed maybe/clarify, in pipeline, and other active jobs.
+- Job Detail separates enrichment, AI review, pipeline fields, and full description from queue triage so the long job list no longer competes with the selected job editor.
+- Manual job creation is secondary behind a collapsed `New manual job` section on the Job Queue.
 - Imported email Prisma models exist for simulated Gmail/job-alert messages.
 - Jobs can optionally reference the imported email that produced them.
 - Authenticated import routes exist:

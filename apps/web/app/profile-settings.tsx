@@ -2,497 +2,51 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 
-type User = {
-  id: string;
+import { AppShell } from "./components/AppShell";
+import { CandidateProfilePanel } from "./components/CandidateProfilePanel";
+import { ImportPanel } from "./components/ImportPanel";
+import { JobCreateForm } from "./components/JobCreateForm";
+import { JobDetailPanel } from "./components/JobDetailPanel";
+import { JobFilters } from "./components/JobFilters";
+import { JobQueuePanel } from "./components/JobQueuePanel";
+import {
+  type ActiveView,
+  type AiReview,
+  type CandidateCv,
+  type CvFormState,
+  type GmailImportFormState,
+  type GmailImportResult,
+  type GmailStatus,
+  type ImportFormState,
+  type ImportedEmail,
+  type ImportedEmailFormState,
+  type Job,
+  type JobEnrichmentFormState,
+  type JobFormState,
+  type PipelineFormState,
+  type Profile,
+  type ProfileFormState,
+  type User,
+  cvToForm,
+  defaultGmailImportForm,
+  emptyCvForm,
+  emptyImportedEmailForm,
+  emptyImportForm,
+  emptyJobForm,
+  emptyPipelineForm,
+  emptyProfileForm,
+  jobToEnrichmentForm,
+  jobToPipelineForm,
+  previewText,
+  profileToForm,
+  textToLanguages,
+  textToList
+} from "./components/types";
+
+type LoginFormState = {
   email: string;
+  password: string;
 };
-
-type Profile = {
-  id: string;
-  profession: string | null;
-  bio: string | null;
-  targetRoles: string[];
-  strongSkills: string[];
-  secondarySkills: string[];
-  engineeringSkills: string[];
-  aiSkills: string[];
-  avoidSkills: string[];
-  minimumSalaryEur: number | null;
-  salaryMinEur: number | null;
-  salaryMaxEur: number | null;
-  acceptableRemoteTypes: string[];
-  preferredLocations: string[];
-  remotePreference: string | null;
-  locationNotes: string | null;
-  salaryNotes: string | null;
-  germanLevel: string | null;
-  englishLevel: string | null;
-  languagesJson: Record<string, string> | null;
-  experienceSummary: string | null;
-  profileNotes: string | null;
-  updatedAt: string;
-  activeCv: CandidateCvMetadata | null;
-};
-
-type CandidateCvMetadata = {
-  id: string;
-  sourceType: string;
-  sourceName: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type CandidateCv = CandidateCvMetadata & {
-  sourceText: string;
-  parsedProfileJson: unknown;
-};
-
-type JobDescription = {
-  summaryText: string | null;
-  fullText: string | null;
-  rawSourceText: string | null;
-  language: string | null;
-};
-
-type FitBreakdownItem = {
-  score: number;
-  verdict: "strong" | "medium" | "weak" | "unknown";
-  notes: string;
-};
-
-type FitBreakdown = {
-  skills: FitBreakdownItem;
-  salary: FitBreakdownItem;
-  locationRemote: FitBreakdownItem;
-  language: FitBreakdownItem;
-  seniority: FitBreakdownItem;
-  sourceQuality: FitBreakdownItem;
-};
-
-type AiReview = {
-  id: string;
-  score: number;
-  decision: string;
-  reviewText: string;
-  riskFlags: string[];
-  cvAngle: string;
-  clarificationQuestions: string[];
-  fitBreakdownJson?: FitBreakdown | null;
-  createdAt: string;
-};
-
-type Job = {
-  id: string;
-  company: string;
-  title: string;
-  location: string | null;
-  remoteType: string;
-  salaryMinEur: number | null;
-  salaryMaxEur: number | null;
-  salaryText: string | null;
-  url: string | null;
-  sourceQuality: string;
-  status: string;
-  userDecision: string | null;
-  applicationStatus: string | null;
-  userNotes: string | null;
-  nextAction: string | null;
-  followUpDate: string | null;
-  appliedAt: string | null;
-  rejectedAt: string | null;
-  importedAt: string;
-  updatedAt: string;
-  archivedAt: string | null;
-  description: JobDescription | null;
-  latestAiReview: AiReview | null;
-};
-
-type ImportedEmail = {
-  id: string;
-  provider: string;
-  providerMessageId: string;
-  providerThreadId: string | null;
-  fromEmail: string | null;
-  fromName: string | null;
-  subject: string;
-  receivedAt: string | null;
-  sourceLabel: string | null;
-  snippet: string | null;
-  bodyText: string | null;
-  importStatus: string;
-  extractionStatus: string;
-  jobCount: number;
-  errorMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type GmailStatus = {
-  connected: boolean;
-  emailAddress: string | null;
-  displayName: string | null;
-  status: string;
-  lastSyncAt: string | null;
-};
-
-type GmailImportResult = {
-  imported: number;
-  duplicates: number;
-  emails: ImportedEmail[];
-  query: string;
-};
-
-type ProfileFormState = {
-  profession: string;
-  bio: string;
-  targetRoles: string;
-  strongSkills: string;
-  secondarySkills: string;
-  engineeringSkills: string;
-  aiSkills: string;
-  avoidSkills: string;
-  salaryMinEur: string;
-  salaryMaxEur: string;
-  salaryNotes: string;
-  acceptableRemoteTypes: string[];
-  preferredLocations: string;
-  locationNotes: string;
-  germanLevel: string;
-  englishLevel: string;
-  languages: string;
-  experienceSummary: string;
-  profileNotes: string;
-};
-
-type CvFormState = {
-  sourceType: string;
-  sourceName: string;
-  sourceText: string;
-};
-
-type JobFormState = {
-  company: string;
-  title: string;
-  location: string;
-  remoteType: string;
-  salaryText: string;
-  url: string;
-  fullDescription: string;
-};
-
-type JobEnrichmentFormState = {
-  url: string;
-  fullDescription: string;
-  language: string;
-  sourceQuality: string;
-};
-
-type ImportFormState = {
-  sourceText: string;
-  sourceType: string;
-  sourceName: string;
-};
-
-type ImportedEmailFormState = {
-  providerMessageId: string;
-  fromEmail: string;
-  fromName: string;
-  subject: string;
-  receivedAt: string;
-  sourceLabel: string;
-  bodyText: string;
-};
-
-type GmailImportFormState = {
-  query: string;
-  maxResults: string;
-};
-
-type PipelineFormState = {
-  userDecision: string;
-  applicationStatus: string;
-  userNotes: string;
-  nextAction: string;
-  followUpDate: string;
-};
-
-type ActiveView = "profile" | "import" | "imports" | "jobs";
-
-const emptyProfileForm: ProfileFormState = {
-  profession: "",
-  bio: "",
-  targetRoles: "",
-  strongSkills: "",
-  secondarySkills: "",
-  engineeringSkills: "",
-  aiSkills: "",
-  avoidSkills: "",
-  salaryMinEur: "",
-  salaryMaxEur: "",
-  salaryNotes: "",
-  acceptableRemoteTypes: [],
-  preferredLocations: "",
-  locationNotes: "",
-  germanLevel: "",
-  englishLevel: "",
-  languages: "",
-  experienceSummary: "",
-  profileNotes: ""
-};
-
-const emptyCvForm: CvFormState = {
-  sourceType: "typst",
-  sourceName: "",
-  sourceText: ""
-};
-
-const emptyJobForm: JobFormState = {
-  company: "",
-  title: "",
-  location: "",
-  remoteType: "unknown",
-  salaryText: "",
-  url: "",
-  fullDescription: ""
-};
-
-const enrichmentSourceQualityOptions = [
-  "unknown",
-  "digest_summary",
-  "email_summary",
-  "partial_description",
-  "full_description"
-];
-
-const emptyImportForm: ImportFormState = {
-  sourceText: "",
-  sourceType: "paste",
-  sourceName: ""
-};
-
-const emptyImportedEmailForm: ImportedEmailFormState = {
-  providerMessageId: "",
-  fromEmail: "",
-  fromName: "",
-  subject: "",
-  receivedAt: "",
-  sourceLabel: "",
-  bodyText: ""
-};
-
-const defaultGmailImportForm: GmailImportFormState = {
-  query: "label:jobAlerts newer_than:30d",
-  maxResults: "10"
-};
-
-const emptyPipelineForm: PipelineFormState = {
-  userDecision: "undecided",
-  applicationStatus: "not_started",
-  userNotes: "",
-  nextAction: "",
-  followUpDate: ""
-};
-
-const remoteTypeOptions = [
-  "unknown",
-  "remote",
-  "remote_first",
-  "hybrid",
-  "homeoffice_possible",
-  "onsite"
-];
-
-const profileRemoteTypeOptions = [
-  "remote",
-  "remote_first",
-  "hybrid",
-  "homeoffice_possible",
-  "onsite",
-  "unknown"
-];
-
-const remoteTypeLabels: Record<string, string> = {
-  remote: "Remote",
-  remote_first: "Remote-first",
-  hybrid: "Hybrid",
-  homeoffice_possible: "Homeoffice possible",
-  onsite: "Onsite",
-  unknown: "Unknown / clarify"
-};
-
-const userDecisionOptions = [
-  "undecided",
-  "interested",
-  "maybe",
-  "not_interested",
-  "applied",
-  "rejected",
-  "interviewing",
-  "offer",
-  "archived"
-];
-
-const applicationStatusOptions = [
-  "not_started",
-  "preparing",
-  "applied",
-  "follow_up_needed",
-  "interviewing",
-  "rejected",
-  "offer",
-  "accepted",
-  "declined"
-];
-
-const fitBreakdownRows: { key: keyof FitBreakdown; label: string }[] = [
-  { key: "skills", label: "Skills" },
-  { key: "salary", label: "Salary" },
-  { key: "locationRemote", label: "Location / Remote" },
-  { key: "language", label: "Language" },
-  { key: "seniority", label: "Seniority" },
-  { key: "sourceQuality", label: "Source quality" }
-];
-
-const listToText = (items: string[]) => items.join(", ");
-
-const textToList = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const languagesToText = (value: Record<string, string> | null) =>
-  value
-    ? Object.entries(value)
-        .map(([language, level]) => `${language}: ${level}`)
-        .join("\n")
-    : "";
-
-const textToLanguages = (value: string) => {
-  const entries = value
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      const [language, ...rest] = item.split(/:|-/);
-      return [language?.trim(), rest.join("-").trim()] as const;
-    })
-    .filter(([language, level]) => language && level);
-
-  return entries.length > 0
-    ? Object.fromEntries(entries.map(([language, level]) => [language, level]))
-    : null;
-};
-
-const profileToForm = (profile: Profile): ProfileFormState => ({
-  profession: profile.profession ?? "",
-  bio: profile.bio ?? "",
-  targetRoles: listToText(profile.targetRoles),
-  strongSkills: listToText(profile.strongSkills),
-  secondarySkills: listToText(profile.secondarySkills),
-  engineeringSkills: listToText(profile.engineeringSkills),
-  aiSkills: listToText(profile.aiSkills),
-  avoidSkills: listToText(profile.avoidSkills),
-  salaryMinEur: profile.salaryMinEur ? String(profile.salaryMinEur) : "",
-  salaryMaxEur: profile.salaryMaxEur ? String(profile.salaryMaxEur) : "",
-  salaryNotes: profile.salaryNotes ?? "",
-  acceptableRemoteTypes: profile.acceptableRemoteTypes,
-  preferredLocations: listToText(profile.preferredLocations),
-  locationNotes: profile.locationNotes ?? "",
-  germanLevel: profile.germanLevel ?? "",
-  englishLevel: profile.englishLevel ?? "",
-  languages: languagesToText(profile.languagesJson),
-  experienceSummary: profile.experienceSummary ?? "",
-  profileNotes: profile.profileNotes ?? ""
-});
-
-const cvToForm = (cv: CandidateCv | null): CvFormState => ({
-  sourceType: cv?.sourceType ?? "typst",
-  sourceName: cv?.sourceName ?? "",
-  sourceText: cv?.sourceText ?? ""
-});
-
-const dateToInput = (value: string | null) => (value ? value.slice(0, 10) : "");
-
-const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString() : "Not set";
-
-const previewText = (value: string, maxLength = 180) => {
-  const compact = value.replace(/\s+/g, " ").trim();
-
-  if (compact.length <= maxLength) {
-    return compact;
-  }
-
-  return `${compact.slice(0, maxLength - 1)}...`;
-};
-
-const extractedJobsStatus = (email: ImportedEmail) => {
-  if (email.extractionStatus === "failed") {
-    return "Failed";
-  }
-
-  if (email.extractionStatus === "not_started") {
-    return "Not extracted yet";
-  }
-
-  if (email.extractionStatus === "succeeded") {
-    return `Extracted ${email.jobCount} job${email.jobCount === 1 ? "" : "s"}`;
-  }
-
-  return email.extractionStatus;
-};
-
-const selectedEmailJobCountText = (email: ImportedEmail) => {
-  if (email.extractionStatus === "not_started") {
-    return "Not extracted yet";
-  }
-
-  if (email.extractionStatus === "failed") {
-    return "Failed";
-  }
-
-  return String(email.jobCount);
-};
-
-const selectedEmailEmptyJobsMessage = (email: ImportedEmail) => {
-  if (email.extractionStatus === "not_started") {
-    return "No jobs extracted yet.";
-  }
-
-  if (email.extractionStatus === "succeeded" && email.jobCount > 0) {
-    return "Jobs were previously extracted from this email. Open Job Inbox to view them.";
-  }
-
-  if (email.extractionStatus === "succeeded") {
-    return "Extraction completed, but no jobs were found.";
-  }
-
-  if (email.extractionStatus === "failed") {
-    return `Extraction failed${email.errorMessage ? `: ${email.errorMessage}` : "."}`;
-  }
-
-  return "No jobs extracted from this email in this session.";
-};
-
-const jobToPipelineForm = (job: Job): PipelineFormState => ({
-  userDecision: job.userDecision ?? "undecided",
-  applicationStatus: job.applicationStatus ?? "not_started",
-  userNotes: job.userNotes ?? "",
-  nextAction: job.nextAction ?? "",
-  followUpDate: dateToInput(job.followUpDate)
-});
-
-const jobToEnrichmentForm = (job: Job | null): JobEnrichmentFormState => ({
-  url: job?.url ?? "",
-  fullDescription: job?.description?.fullText ?? "",
-  language: job?.description?.language ?? "",
-  sourceQuality:
-    job && enrichmentSourceQualityOptions.includes(job.sourceQuality)
-      ? job.sourceQuality
-      : "unknown"
-});
 
 const parseResponse = async <T,>(response: Response): Promise<T> => {
   const body = await response.json().catch(() => null);
@@ -513,7 +67,7 @@ const parseResponse = async <T,>(response: Response): Promise<T> => {
 
 export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [activeView, setActiveView] = useState<ActiveView>("profile");
-  const [loginForm, setLoginForm] = useState({
+  const [loginForm, setLoginForm] = useState<LoginFormState>({
     email: "demo@jobcc.local",
     password: "password123"
   });
@@ -597,6 +151,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const loadJob = async (id: string) => {
     const data = await request<{ job: Job }>(`/jobs/${id}`);
     setSelectedJob(data.job);
+    return data.job;
+  };
+
+  const openJob = (job: Job) => {
+    setSelectedJob(job);
+    setActiveView("jobs");
+    void loadJob(job.id);
   };
 
   const selectImportedEmail = (email: ImportedEmail) => {
@@ -635,7 +196,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       return;
     }
 
-    setActiveView("imports");
+    setActiveView("import");
 
     if (gmail === "connected") {
       setStatus("Gmail connected");
@@ -965,12 +526,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         warnings: string[];
         createdCount: number;
         skippedDuplicates: number;
-      }>(
-        `/imports/emails/${id}/extract`,
-        {
-          method: "POST"
-        }
-      );
+      }>(`/imports/emails/${id}/extract`, {
+        method: "POST"
+      });
 
       setImportedEmailExtractedJobs(data.jobs);
       setImportedEmailWarnings(data.warnings);
@@ -1084,7 +642,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         method: "POST"
       });
 
-      setSelectedJob(null);
+      setSelectedJob((current) => (current?.id === id ? null : current));
       await loadJobs();
       setStatus("Job archived");
     } catch (archiveError) {
@@ -1113,9 +671,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           applicationStatus: pipelineForm.applicationStatus || null,
           userNotes: pipelineForm.userNotes.trim() || null,
           nextAction: pipelineForm.nextAction.trim() || null,
-          followUpDate: pipelineForm.followUpDate
-            ? `${pipelineForm.followUpDate}T00:00:00.000Z`
-            : null
+          followUpDate: pipelineForm.followUpDate ? `${pipelineForm.followUpDate}T00:00:00.000Z` : null
         })
       });
 
@@ -1249,1229 +805,116 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   });
 
   return (
-    <main className="page-shell" data-api-url={apiUrl}>
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Milestone 10</p>
-          <h1>Job Command Center</h1>
-        </div>
-        <p className="api-pill">API: {apiUrl}</p>
-      </header>
-
-      <nav className="tab-row" aria-label="Primary">
-        <button
-          className={activeView === "profile" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveView("profile")}
-        >
-          Candidate Profile
-        </button>
-        <button
-          className={activeView === "import" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveView("import")}
-        >
-          Import/Paste
-        </button>
-        <button
-          className={activeView === "imports" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveView("imports")}
-        >
-          Imports
-        </button>
-        <button
-          className={activeView === "jobs" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveView("jobs")}
-        >
-          Job Inbox
-        </button>
-      </nav>
-
-      <section className="workspace" aria-live="polite">
-        <form className="login-panel" onSubmit={handleLogin}>
-          <div>
-            <h2>Demo Login</h2>
-            <p className="muted">Use the seeded local account.</p>
-          </div>
-
-          <label>
-            Email
-            <input
-              value={loginForm.email}
-              onChange={(event) =>
-                setLoginForm((current) => ({ ...current, email: event.target.value }))
-              }
-              type="email"
-              autoComplete="email"
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              value={loginForm.password}
-              onChange={(event) =>
-                setLoginForm((current) => ({ ...current, password: event.target.value }))
-              }
-              type="password"
-              autoComplete="current-password"
-            />
-          </label>
-
-          <div className="button-row">
-            <button disabled={isBusy} type="submit">
-              Sign in
-            </button>
-            <button disabled={isBusy || !user} type="button" onClick={handleLogout}>
-              Sign out
+    <AppShell
+      activeView={activeView}
+      apiUrl={apiUrl}
+      error={error}
+      isBusy={isBusy}
+      loginForm={loginForm}
+      onLogin={handleLogin}
+      onLogout={() => void handleLogout()}
+      setActiveView={setActiveView}
+      setLoginForm={setLoginForm}
+      status={status}
+      user={user}
+    >
+      {activeView === "profile" ? (
+        <CandidateProfilePanel
+          activeCv={activeCv}
+          cvForm={cvForm}
+          isBusy={isBusy}
+          onCvSave={handleCvSave}
+          onProfileSave={handleProfileSave}
+          onRefreshCv={loadCandidateCv}
+          onRefreshProfile={loadProfile}
+          profile={profile}
+          profileForm={profileForm}
+          toggleAcceptableRemoteType={toggleAcceptableRemoteType}
+          updateCvField={updateCvField}
+          updateProfileField={updateProfileField}
+          user={user}
+        />
+      ) : activeView === "import" ? (
+        <ImportPanel
+          extractedJobs={extractedJobs}
+          gmailImportForm={gmailImportForm}
+          gmailImportResult={gmailImportResult}
+          gmailStatus={gmailStatus}
+          importForm={importForm}
+          importWarnings={importWarnings}
+          importedEmailExtractedJobs={importedEmailExtractedJobs}
+          importedEmailForm={importedEmailForm}
+          importedEmailWarnings={importedEmailWarnings}
+          importedEmails={importedEmails}
+          isBusy={isBusy}
+          onDisconnectGmail={() => void handleDisconnectGmail()}
+          onExtractImportedEmail={(id) => void handleExtractImportedEmail(id)}
+          onExtractJobs={handleExtractJobs}
+          onImportFromGmail={handleImportFromGmail}
+          onOpenJob={openJob}
+          onRefreshImportedEmails={loadImportedEmails}
+          onSelectImportedEmail={selectImportedEmail}
+          onSimulateImportedEmail={handleSimulateImportedEmail}
+          onStartGmailOAuth={() => void handleStartGmailOAuth()}
+          selectedImportedEmail={selectedImportedEmail}
+          updateGmailImportField={updateGmailImportField}
+          updateImportField={updateImportField}
+          updateImportedEmailField={updateImportedEmailField}
+          user={user}
+        />
+      ) : (
+        <section className="profile-panel job-queue-page">
+          <div className="section-heading">
+            <h2>Job Queue</h2>
+            <button disabled={isBusy || !user} type="button" onClick={() => void loadJobs()}>
+              Refresh
             </button>
           </div>
 
-          {user ? <p className="muted">Signed in as {user.email}</p> : null}
-        </form>
-
-        {activeView === "profile" ? (
-          <section className="profile-panel">
-            <div className="section-heading">
-              <h2>Candidate Profile</h2>
-              {profile ? (
-                <p className="muted">Updated {new Date(profile.updatedAt).toLocaleString()}</p>
-              ) : null}
-            </div>
-
-            <form className="job-form" onSubmit={handleCvSave}>
-              <div className="section-heading">
-                <h3>CV Source</h3>
-                {activeCv ? (
-                  <p className="muted">
-                    {activeCv.sourceName || "Active CV"} updated{" "}
-                    {new Date(activeCv.updatedAt).toLocaleString()}
-                  </p>
-                ) : null}
-              </div>
-              <p className="muted">
-                Save CV and update profile from CV refreshes parsed CV-backed fields like
-                profession, bio, roles, skills, languages, and experience.
-                Job-search preferences such as salary range, remote modes, locations, and avoid
-                skills stay manual.
-              </p>
-              <div className="form-grid">
-                <label>
-                  Source type
-                  <input
-                    value={cvForm.sourceType}
-                    onChange={(event) => updateCvField("sourceType", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Source name
-                  <input
-                    value={cvForm.sourceName}
-                    onChange={(event) => updateCvField("sourceName", event.target.value)}
-                  />
-                </label>
-                <label className="wide">
-                  Typst CV source
-                  <textarea
-                    value={cvForm.sourceText}
-                    onChange={(event) => updateCvField("sourceText", event.target.value)}
-                    rows={10}
-                  />
-                </label>
-              </div>
-              <div className="button-row">
-                <button disabled={isBusy || !user || !cvForm.sourceText.trim()} type="submit">
-                  Save CV and update profile from CV
-                </button>
-                <button
-                  disabled={isBusy || !user}
-                  type="button"
-                  onClick={() => void loadCandidateCv()}
-                >
-                  Refresh CV
-                </button>
-              </div>
-            </form>
-
-            <form className="job-form" onSubmit={handleProfileSave}>
-              <div className="section-heading">
-                <h3>Candidate Summary</h3>
-              </div>
-              <p className="muted">
-                The CV source describes your background. Preferences below are used as filters for
-                scoring jobs.
-              </p>
-              <div className="form-grid">
-                <label>
-                  Profession
-                  <input
-                    value={profileForm.profession}
-                    onChange={(event) => updateProfileField("profession", event.target.value)}
-                  />
-                </label>
-                <label>
-                  Desired salary min EUR
-                  <input
-                    value={profileForm.salaryMinEur}
-                    onChange={(event) => updateProfileField("salaryMinEur", event.target.value)}
-                    inputMode="numeric"
-                  />
-                </label>
-                <label>
-                  Desired salary max EUR
-                  <input
-                    value={profileForm.salaryMaxEur}
-                    onChange={(event) => updateProfileField("salaryMaxEur", event.target.value)}
-                    inputMode="numeric"
-                  />
-                </label>
-                <label className="wide">
-                  Salary notes
-                  <textarea
-                    value={profileForm.salaryNotes}
-                    onChange={(event) => updateProfileField("salaryNotes", event.target.value)}
-                    rows={3}
-                  />
-                </label>
-                <label>
-                  Preferred locations
-                  <textarea
-                    value={profileForm.preferredLocations}
-                    onChange={(event) =>
-                      updateProfileField("preferredLocations", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="wide">
-                  Location notes
-                  <textarea
-                    value={profileForm.locationNotes}
-                    onChange={(event) => updateProfileField("locationNotes", event.target.value)}
-                    rows={3}
-                  />
-                </label>
-                <div className="wide checkbox-group">
-                  <p>Acceptable remote types</p>
-                  <div>
-                    {profileRemoteTypeOptions.map((option) => (
-                      <label key={option}>
-                        <input
-                          checked={profileForm.acceptableRemoteTypes.includes(option)}
-                          onChange={() => toggleAcceptableRemoteType(option)}
-                          type="checkbox"
-                        />
-                        {remoteTypeLabels[option]}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <label>
-                  German level
-                  <input
-                    value={profileForm.germanLevel}
-                    onChange={(event) => updateProfileField("germanLevel", event.target.value)}
-                  />
-                </label>
-                <label>
-                  English level
-                  <input
-                    value={profileForm.englishLevel}
-                    onChange={(event) => updateProfileField("englishLevel", event.target.value)}
-                  />
-                </label>
-                <label className="wide">
-                  Languages
-                  <textarea
-                    value={profileForm.languages}
-                    onChange={(event) => updateProfileField("languages", event.target.value)}
-                    rows={4}
-                  />
-                </label>
-                <label className="wide">
-                  Bio
-                  <textarea
-                    value={profileForm.bio}
-                    onChange={(event) => updateProfileField("bio", event.target.value)}
-                    rows={4}
-                  />
-                </label>
-              </div>
-
-              <div className="section-heading">
-                <h3>Skills</h3>
-              </div>
-              <div className="form-grid">
-              <label>
-                Target roles
-                <textarea
-                  value={profileForm.targetRoles}
-                  onChange={(event) => updateProfileField("targetRoles", event.target.value)}
-                />
-              </label>
-
-              <label>
-                Strong skills
-                <textarea
-                  value={profileForm.strongSkills}
-                  onChange={(event) => updateProfileField("strongSkills", event.target.value)}
-                />
-              </label>
-
-              <label>
-                Secondary skills
-                <textarea
-                  value={profileForm.secondarySkills}
-                  onChange={(event) => updateProfileField("secondarySkills", event.target.value)}
-                />
-              </label>
-
-              <label>
-                Engineering skills
-                <textarea
-                  value={profileForm.engineeringSkills}
-                  onChange={(event) => updateProfileField("engineeringSkills", event.target.value)}
-                />
-              </label>
-
-              <label>
-                AI skills
-                <textarea
-                  value={profileForm.aiSkills}
-                  onChange={(event) => updateProfileField("aiSkills", event.target.value)}
-                />
-              </label>
-
-              <label>
-                Avoid skills
-                <textarea
-                  value={profileForm.avoidSkills}
-                  onChange={(event) => updateProfileField("avoidSkills", event.target.value)}
-                />
-              </label>
-              </div>
-
-              <div className="section-heading">
-                <h3>Experience</h3>
-              </div>
-              <div className="form-grid">
-                <label className="wide">
-                  Experience summary
-                  <textarea
-                    value={profileForm.experienceSummary}
-                    onChange={(event) =>
-                      updateProfileField("experienceSummary", event.target.value)
-                    }
-                    rows={5}
-                  />
-                </label>
-
-                <label className="wide">
-                  Profile notes
-                  <textarea
-                    value={profileForm.profileNotes}
-                    onChange={(event) => updateProfileField("profileNotes", event.target.value)}
-                    rows={5}
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user} type="submit">
-                  Save profile
-                </button>
-                <button disabled={isBusy || !user} type="button" onClick={loadProfile}>
-                  Refresh
-                </button>
-              </div>
-            </form>
-          </section>
-        ) : activeView === "import" ? (
-          <section className="profile-panel">
-            <div className="section-heading">
-              <h2>Import/Paste</h2>
-            </div>
-
-            <form className="job-form" onSubmit={handleExtractJobs}>
-              <div className="form-grid">
-                <label>
-                  Source type
-                  <input
-                    value={importForm.sourceType}
-                    onChange={(event) => updateImportField("sourceType", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Source name
-                  <input
-                    value={importForm.sourceName}
-                    onChange={(event) => updateImportField("sourceName", event.target.value)}
-                  />
-                </label>
-
-                <label className="wide">
-                  Pasted job or email text
-                  <textarea
-                    required
-                    value={importForm.sourceText}
-                    onChange={(event) => updateImportField("sourceText", event.target.value)}
-                    rows={12}
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user || !importForm.sourceText.trim()} type="submit">
-                  Extract jobs
-                </button>
-              </div>
-            </form>
-
-            {importWarnings.length > 0 ? (
-              <div className="description-block">
-                <h3>Warnings</h3>
-                <ul className="compact-list">
-                  {importWarnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            <div className="description-block">
-              <h3>Created Jobs</h3>
-              {extractedJobs.length === 0 ? <p className="muted">No imported jobs yet.</p> : null}
-              <ul className="job-list">
-                {extractedJobs.map((job) => (
-                  <li key={job.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedJob(job);
-                        setActiveView("jobs");
-                      }}
-                    >
-                      <span>
-                        <strong>{job.title}</strong>
-                        <small>{job.company}</small>
-                      </span>
-                      <span className="badge-row">
-                        <em>{job.status}</em>
-                        <em>{job.sourceQuality}</em>
-                        <em>{job.applicationStatus ?? "not_started"}</em>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        ) : activeView === "imports" ? (
-          <section className="profile-panel">
-            <div className="section-heading">
-              <h2>Imports</h2>
-              <button disabled={isBusy || !user} type="button" onClick={loadImportedEmails}>
-                Refresh
-              </button>
-            </div>
-
-            <section className="description-block">
-              <div className="section-heading">
-                <h3>Gmail Connection</h3>
-                <span className="badge-row">
-                  <em>{gmailStatus?.connected ? "connected" : "disconnected"}</em>
-                </span>
-              </div>
-
-              <dl className="detail-list">
-                <div>
-                  <dt>Account</dt>
-                  <dd>{gmailStatus?.emailAddress ?? "Not connected"}</dd>
-                </div>
-                <div>
-                  <dt>Name</dt>
-                  <dd>{gmailStatus?.displayName ?? "Not set"}</dd>
-                </div>
-                <div>
-                  <dt>Last import</dt>
-                  <dd>{formatDate(gmailStatus?.lastSyncAt ?? null)}</dd>
-                </div>
-              </dl>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user} type="button" onClick={handleStartGmailOAuth}>
-                  Connect Gmail
-                </button>
-                <button
-                  disabled={isBusy || !user || !gmailStatus?.connected}
-                  type="button"
-                  onClick={handleDisconnectGmail}
-                >
-                  Disconnect
-                </button>
-              </div>
-            </section>
-
-            <form className="job-form" onSubmit={handleImportFromGmail}>
-              <div className="section-heading">
-                <h3>Gmail Import</h3>
-              </div>
-
-              <div className="form-grid">
-                <label>
-                  Gmail query
-                  <input
-                    value={gmailImportForm.query}
-                    onChange={(event) => updateGmailImportField("query", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Max results
-                  <input
-                    value={gmailImportForm.maxResults}
-                    onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
-                    inputMode="numeric"
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user || !gmailStatus?.connected} type="submit">
-                  Import from Gmail
-                </button>
-              </div>
-            </form>
-
-            {gmailImportResult ? (
-              <div className="description-block">
-                <h3>Gmail Import Result</h3>
-                <dl className="detail-list">
-                  <div>
-                    <dt>Imported</dt>
-                    <dd>{gmailImportResult.imported}</dd>
-                  </div>
-                  <div>
-                    <dt>Duplicates</dt>
-                    <dd>{gmailImportResult.duplicates}</dd>
-                  </div>
-                  <div>
-                    <dt>Query</dt>
-                    <dd>{gmailImportResult.query}</dd>
-                  </div>
-                </dl>
-              </div>
-            ) : null}
-
-            <form className="job-form" onSubmit={handleSimulateImportedEmail}>
-              <div className="section-heading">
-                <h3>Simulated Email Import</h3>
-              </div>
-
-              <div className="form-grid">
-                <label>
-                  Provider message ID
-                  <input
-                    required
-                    value={importedEmailForm.providerMessageId}
-                    onChange={(event) =>
-                      updateImportedEmailField("providerMessageId", event.target.value)
-                    }
-                  />
-                </label>
-
-                <label>
-                  From email
-                  <input
-                    value={importedEmailForm.fromEmail}
-                    onChange={(event) => updateImportedEmailField("fromEmail", event.target.value)}
-                    type="email"
-                  />
-                </label>
-
-                <label>
-                  From name
-                  <input
-                    value={importedEmailForm.fromName}
-                    onChange={(event) => updateImportedEmailField("fromName", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Received at
-                  <input
-                    value={importedEmailForm.receivedAt}
-                    onChange={(event) => updateImportedEmailField("receivedAt", event.target.value)}
-                    type="datetime-local"
-                  />
-                </label>
-
-                <label>
-                  Subject
-                  <input
-                    required
-                    value={importedEmailForm.subject}
-                    onChange={(event) => updateImportedEmailField("subject", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Label
-                  <input
-                    value={importedEmailForm.sourceLabel}
-                    onChange={(event) => updateImportedEmailField("sourceLabel", event.target.value)}
-                  />
-                </label>
-
-                <label className="wide">
-                  Email body
-                  <textarea
-                    required
-                    value={importedEmailForm.bodyText}
-                    onChange={(event) => updateImportedEmailField("bodyText", event.target.value)}
-                    rows={12}
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button
-                  disabled={
-                    isBusy ||
-                    !user ||
-                    !importedEmailForm.providerMessageId.trim() ||
-                    !importedEmailForm.subject.trim() ||
-                    !importedEmailForm.bodyText.trim()
-                  }
-                  type="submit"
-                >
-                  Simulate import
-                </button>
-              </div>
-            </form>
-
-            <div className="jobs-layout">
-              <section>
-                <h3>Import History</h3>
-                {importedEmails.length === 0 ? (
-                  <p className="muted">No imported emails yet.</p>
-                ) : null}
-                <ul className="job-list">
-                  {importedEmails.map((email) => (
-                    <li key={email.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectImportedEmail(email);
-                        }}
-                      >
-                        <span>
-                          <strong>{email.subject}</strong>
-                          <small>
-                            Email from {email.fromName || email.fromEmail || email.providerMessageId}
-                          </small>
-                          <small>
-                            Preview:{" "}
-                            {email.snippet || previewText(email.bodyText ?? "") || "No preview saved."}
-                          </small>
-                        </span>
-                        <span className="badge-row">
-                          <em>Import: {email.importStatus}</em>
-                          <em>Extraction: {email.extractionStatus}</em>
-                          <em>{extractedJobsStatus(email)}</em>
-                          {email.extractionStatus === "succeeded" ? <em>Processed</em> : null}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="job-detail" aria-label="Imported email detail">
-                {selectedImportedEmail ? (
-                  <>
-                    <div className="section-heading">
-                      <div>
-                        <h3>{selectedImportedEmail.subject}</h3>
-                        <p className="muted">
-                          {selectedImportedEmail.fromName || selectedImportedEmail.fromEmail || "Unknown sender"}
-                        </p>
-                      </div>
-                      <button
-                        disabled={isBusy || !user || !selectedImportedEmail.bodyText?.trim()}
-                        type="button"
-                        onClick={() => void handleExtractImportedEmail(selectedImportedEmail.id)}
-                      >
-                        {selectedImportedEmail.extractionStatus === "succeeded"
-                          ? "Re-run extraction"
-                          : "Extract jobs from email"}
-                      </button>
-                    </div>
-                    {selectedImportedEmail.extractionStatus === "succeeded" ? (
-                      <p className="muted">Extraction complete. Re-running will skip duplicates.</p>
-                    ) : null}
-
-                    <dl className="detail-list">
-                      <div>
-                        <dt>From</dt>
-                        <dd>
-                          {selectedImportedEmail.fromName ||
-                            selectedImportedEmail.fromEmail ||
-                            "Unknown sender"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Message ID</dt>
-                        <dd>{selectedImportedEmail.providerMessageId}</dd>
-                      </div>
-                      <div>
-                        <dt>Received</dt>
-                        <dd>{formatDate(selectedImportedEmail.receivedAt)}</dd>
-                      </div>
-                      <div>
-                        <dt>Label</dt>
-                        <dd>{selectedImportedEmail.sourceLabel ?? "Not set"}</dd>
-                      </div>
-                      <div>
-                        <dt>Import</dt>
-                        <dd>{selectedImportedEmail.importStatus}</dd>
-                      </div>
-                      <div>
-                        <dt>Extraction</dt>
-                        <dd>{selectedImportedEmail.extractionStatus}</dd>
-                      </div>
-                      <div>
-                        <dt>Extracted jobs</dt>
-                        <dd>{selectedEmailJobCountText(selectedImportedEmail)}</dd>
-                      </div>
-                    </dl>
-
-                    {selectedImportedEmail.errorMessage ? (
-                      <div className="description-block">
-                        <h4>Extraction Error</h4>
-                        <p>{selectedImportedEmail.errorMessage}</p>
-                      </div>
-                    ) : null}
-
-                    <div className="description-block">
-                      <h4>Snippet</h4>
-                      <p>
-                        {selectedImportedEmail.snippet ||
-                          previewText(selectedImportedEmail.bodyText ?? "") ||
-                          "No snippet saved."}
-                      </p>
-                    </div>
-
-                    {importedEmailWarnings.length > 0 ? (
-                      <div className="description-block">
-                        <h4>Warnings</h4>
-                        <ul className="compact-list">
-                          {importedEmailWarnings.map((warning) => (
-                            <li key={warning}>{warning}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    <div className="description-block">
-                      <h4>Created Jobs</h4>
-                      {importedEmailExtractedJobs.length === 0 ? (
-                        <p className="muted">{selectedEmailEmptyJobsMessage(selectedImportedEmail)}</p>
-                      ) : null}
-                      <ul className="job-list">
-                        {importedEmailExtractedJobs.map((job) => (
-                          <li key={job.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedJob(job);
-                                setActiveView("jobs");
-                              }}
-                            >
-                              <span>
-                                <strong>{job.title}</strong>
-                                <small>{job.company}</small>
-                              </span>
-                              <span className="badge-row">
-                                <em>{job.status}</em>
-                                <em>{job.sourceQuality}</em>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </>
-                ) : (
-                  <p className="muted">Select an imported email to view details.</p>
-                )}
-              </section>
-            </div>
-          </section>
-        ) : (
-          <section className="profile-panel">
-            <div className="section-heading">
-              <h2>Job Inbox</h2>
-              <button disabled={isBusy || !user} type="button" onClick={loadJobs}>
-                Refresh
-              </button>
-            </div>
-
-            <form className="job-form" onSubmit={handleJobCreate}>
-              <div className="form-grid">
-                <label>
-                  Company
-                  <input
-                    required
-                    value={jobForm.company}
-                    onChange={(event) => updateJobField("company", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Title
-                  <input
-                    required
-                    value={jobForm.title}
-                    onChange={(event) => updateJobField("title", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Location
-                  <input
-                    value={jobForm.location}
-                    onChange={(event) => updateJobField("location", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Remote type
-                  <select
-                    value={jobForm.remoteType}
-                    onChange={(event) => updateJobField("remoteType", event.target.value)}
-                  >
-                    {remoteTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Salary text
-                  <input
-                    value={jobForm.salaryText}
-                    onChange={(event) => updateJobField("salaryText", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  URL
-                  <input
-                    value={jobForm.url}
-                    onChange={(event) => updateJobField("url", event.target.value)}
-                    type="url"
-                  />
-                </label>
-
-                <label className="wide">
-                  Full description
-                  <textarea
-                    value={jobForm.fullDescription}
-                    onChange={(event) => updateJobField("fullDescription", event.target.value)}
-                    rows={6}
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user} type="submit">
-                  Create job
-                </button>
-              </div>
-            </form>
-
-            <div className="filter-row" aria-label="Job filters">
-              <label>
-                User decision
-                <select
-                  value={userDecisionFilter}
-                  onChange={(event) => setUserDecisionFilter(event.target.value)}
-                >
-                  <option value="">All decisions</option>
-                  {userDecisionOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Application status
-                <select
-                  value={applicationStatusFilter}
-                  onChange={(event) => setApplicationStatusFilter(event.target.value)}
-                >
-                  <option value="">All statuses</option>
-                  {applicationStatusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="jobs-layout">
-              <section>
-                <h3>Active Jobs</h3>
-                {jobs.length === 0 ? <p className="muted">No active jobs yet.</p> : null}
-                {jobs.length > 0 && filteredJobs.length === 0 ? (
-                  <p className="muted">No jobs match the selected filters.</p>
-                ) : null}
-                <ul className="job-list">
-                  {filteredJobs.map((job) => (
-                    <li key={job.id}>
-                      <button type="button" onClick={() => void loadJob(job.id)}>
-                        <span>
-                          <strong>{job.title}</strong>
-                          <small>{job.company}</small>
-                        </span>
-                        <span className="badge-row">
-                          <em>{job.status}</em>
-                          <em>{job.sourceQuality}</em>
-                          <em>{job.applicationStatus ?? "not_started"}</em>
-                          <em>{job.userDecision ?? "undecided"}</em>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="job-detail" aria-label="Job detail">
-                {selectedJob ? (
-                  <>
-                    <div className="section-heading">
-                      <div>
-                        <h3>{selectedJob.title}</h3>
-                        <p className="muted">{selectedJob.company}</p>
-                      </div>
-                      <button
-                        disabled={isBusy}
-                        type="button"
-                        onClick={() => void handleArchiveJob(selectedJob.id)}
-                      >
-                        Archive
-                      </button>
-                    </div>
-                    <div className="button-row">
-                      <button
-                        disabled={isBusy || !user}
-                        type="button"
-                        onClick={() => void handleReviewJob(selectedJob.id)}
-                      >
-                        Run AI review
-                      </button>
-                    </div>
-                    <dl className="detail-list">
-                      <div>
-                        <dt>Status</dt>
-                        <dd>{selectedJob.status}</dd>
-                      </div>
-                      <div>
-                        <dt>Source quality</dt>
-                        <dd>{selectedJob.sourceQuality}</dd>
-                      </div>
-                      <div>
-                        <dt>Location</dt>
-                        <dd>{selectedJob.location ?? "Unknown"}</dd>
-                      </div>
-                      <div>
-                        <dt>Remote</dt>
-                        <dd>{selectedJob.remoteType}</dd>
-                      </div>
-                      <div>
-                        <dt>Salary</dt>
-                        <dd>{selectedJob.salaryText ?? "Not listed"}</dd>
-                      </div>
-                      <div>
-                        <dt>URL</dt>
-                        <dd>
-                          {selectedJob.url ? (
-                            <a href={selectedJob.url} rel="noreferrer" target="_blank">
-                              {selectedJob.url}
-                            </a>
-                          ) : (
-                            "Not listed"
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
-                    {selectedJob.sourceQuality !== "full_description" ? (
-                      <p className="muted">
-                        This job may only have an email summary. Paste the full description for
-                        better AI review.
-                      </p>
-                    ) : null}
-                    {selectedJob.status === "ready_for_analysis" && selectedJob.latestAiReview ? (
-                      <p className="muted">
-                        Job details changed. Rerun AI review for updated recommendation.
-                      </p>
-                    ) : null}
-                    <form className="description-block pipeline-form" onSubmit={handleEnrichmentSave}>
-                      <div className="section-heading">
-                        <h4>Job Detail Enrichment</h4>
-                      </div>
-
-                      <div className="form-grid">
-                        <label>
-                          Original job URL
-                          <input
-                            value={enrichmentForm.url}
-                            onChange={(event) =>
-                              updateEnrichmentField("url", event.target.value)
-                            }
-                            type="url"
-                          />
-                        </label>
-
-                        <label>
-                          Language
-                          <input
-                            value={enrichmentForm.language}
-                            onChange={(event) =>
-                              updateEnrichmentField("language", event.target.value)
-                            }
-                          />
-                        </label>
-
-                        <label>
-                          Source quality
-                          <select
-                            value={enrichmentForm.sourceQuality}
-                            onChange={(event) =>
-                              updateEnrichmentField("sourceQuality", event.target.value)
-                            }
-                          >
-                            {enrichmentSourceQualityOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <label className="wide">
-                          Full job description
-                          <textarea
-                            value={enrichmentForm.fullDescription}
-                            onChange={(event) =>
-                              updateEnrichmentField("fullDescription", event.target.value)
-                            }
-                            rows={8}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="button-row">
-                        <button disabled={isBusy || !user} type="submit">
-                          Save enriched details
-                        </button>
-                        <button
-                          disabled={isBusy || !user}
-                          type="button"
-                          onClick={() => void saveJobEnrichment(true)}
-                        >
-                          Save and run AI review
-                        </button>
-                      </div>
-                    </form>
-                    <form className="description-block pipeline-form" onSubmit={handlePipelineSave}>
-                      <div className="section-heading">
-                        <h4>Application Pipeline</h4>
-                        <button disabled={isBusy || !user} type="submit">
-                          Save pipeline
-                        </button>
-                      </div>
-
-                      <div className="form-grid">
-                        <label>
-                          User decision
-                          <select
-                            value={pipelineForm.userDecision}
-                            onChange={(event) =>
-                              updatePipelineField("userDecision", event.target.value)
-                            }
-                          >
-                            {userDecisionOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <label>
-                          Application status
-                          <select
-                            value={pipelineForm.applicationStatus}
-                            onChange={(event) =>
-                              updatePipelineField("applicationStatus", event.target.value)
-                            }
-                          >
-                            {applicationStatusOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <label className="wide">
-                          User notes
-                          <textarea
-                            value={pipelineForm.userNotes}
-                            onChange={(event) =>
-                              updatePipelineField("userNotes", event.target.value)
-                            }
-                            rows={4}
-                          />
-                        </label>
-
-                        <label className="wide">
-                          Next action
-                          <textarea
-                            value={pipelineForm.nextAction}
-                            onChange={(event) =>
-                              updatePipelineField("nextAction", event.target.value)
-                            }
-                            rows={3}
-                          />
-                        </label>
-
-                        <label>
-                          Follow-up date
-                          <input
-                            value={pipelineForm.followUpDate}
-                            onChange={(event) =>
-                              updatePipelineField("followUpDate", event.target.value)
-                            }
-                            type="date"
-                          />
-                        </label>
-                      </div>
-
-                      <dl className="detail-list">
-                        <div>
-                          <dt>Applied at</dt>
-                          <dd>{formatDate(selectedJob.appliedAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>Rejected at</dt>
-                          <dd>{formatDate(selectedJob.rejectedAt)}</dd>
-                        </div>
-                      </dl>
-                    </form>
-                    <div className="description-block">
-                      <h4>Description</h4>
-                      <p>{selectedJob.description?.fullText ?? "No full description saved."}</p>
-                    </div>
-                    <div className="description-block">
-                      <h4>Latest AI Review</h4>
-                      {selectedJob.latestAiReview ? (
-                        <div className="review-block">
-                          <dl className="detail-list">
-                            <div>
-                              <dt>Score</dt>
-                              <dd>{selectedJob.latestAiReview.score}</dd>
-                            </div>
-                            <div>
-                              <dt>Decision</dt>
-                              <dd>{selectedJob.latestAiReview.decision}</dd>
-                            </div>
-                          </dl>
-                          <p className="muted">
-                            Overall score and decision are the final result. Fit breakdown shows
-                            dimension-level reasoning.
-                          </p>
-                          <p>{selectedJob.latestAiReview.reviewText}</p>
-                          <h5>Fit Breakdown</h5>
-                          {selectedJob.latestAiReview.fitBreakdownJson ? (
-                            <div className="fit-breakdown-grid">
-                              {fitBreakdownRows.map(({ key, label }) => {
-                                const item = selectedJob.latestAiReview?.fitBreakdownJson?.[key];
-
-                                if (!item) {
-                                  return null;
-                                }
-
-                                return (
-                                  <div className="fit-breakdown-card" key={key}>
-                                    <div className="fit-breakdown-heading">
-                                      <strong>{label}</strong>
-                                      <span className={`fit-verdict ${item.verdict}`}>
-                                        {item.verdict}
-                                      </span>
-                                    </div>
-                                    <div className="fit-breakdown-score">{item.score}</div>
-                                    <p>{item.notes}</p>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="muted">No fit breakdown for this review.</p>
-                          )}
-                          {selectedJob.sourceQuality !== "full_description" ? (
-                            <p className="muted">
-                              Review may be less reliable until job is enriched.
-                            </p>
-                          ) : null}
-                          <h5>Risk flags</h5>
-                          {selectedJob.latestAiReview.riskFlags.length > 0 ? (
-                            <ul className="compact-list">
-                              {selectedJob.latestAiReview.riskFlags.map((flag) => (
-                                <li key={flag}>{flag}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="muted">No risk flags.</p>
-                          )}
-                          <h5>CV angle</h5>
-                          <p>{selectedJob.latestAiReview.cvAngle}</p>
-                          <h5>Clarification questions</h5>
-                          {selectedJob.latestAiReview.clarificationQuestions.length > 0 ? (
-                            <ul className="compact-list">
-                              {selectedJob.latestAiReview.clarificationQuestions.map((question) => (
-                                <li key={question}>{question}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="muted">No clarification questions.</p>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="muted">No AI review yet.</p>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="muted">Select a job to view details.</p>
-                )}
-              </section>
-            </div>
-          </section>
-        )}
-      </section>
-
-      {status ? <p className="status success">{status}</p> : null}
-      {error ? <p className="status error">{error}</p> : null}
-    </main>
+          <JobCreateForm
+            canCreate={Boolean(user)}
+            form={jobForm}
+            isBusy={isBusy}
+            onSubmit={handleJobCreate}
+            updateField={updateJobField}
+          />
+
+          <JobFilters
+            applicationStatusFilter={applicationStatusFilter}
+            setApplicationStatusFilter={setApplicationStatusFilter}
+            setUserDecisionFilter={setUserDecisionFilter}
+            userDecisionFilter={userDecisionFilter}
+          />
+
+          <div className="job-workspace">
+            <JobQueuePanel
+              isBusy={isBusy}
+              jobs={filteredJobs}
+              onArchiveJob={(id) => void handleArchiveJob(id)}
+              onOpenJob={openJob}
+              onRunReview={(id) => void handleReviewJob(id)}
+              selectedJobId={selectedJob?.id ?? null}
+              totalJobs={jobs.length}
+              user={user}
+            />
+
+            <JobDetailPanel
+              enrichmentForm={enrichmentForm}
+              isBusy={isBusy}
+              job={selectedJob}
+              onArchiveJob={(id) => void handleArchiveJob(id)}
+              onEnrichmentSave={handleEnrichmentSave}
+              onPipelineSave={handlePipelineSave}
+              onRunReview={(id) => void handleReviewJob(id)}
+              onSaveAndReview={() => void saveJobEnrichment(true)}
+              pipelineForm={pipelineForm}
+              updateEnrichmentField={updateEnrichmentField}
+              updatePipelineField={updatePipelineField}
+              user={user}
+            />
+          </div>
+        </section>
+      )}
+    </AppShell>
   );
 }
