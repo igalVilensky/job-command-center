@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 12 job queue and detail UX cleanup phase.
+This project is currently in the Milestone 13 clean app shell and UX polish phase.
 
 ## Existing prototype
 
@@ -100,9 +100,13 @@ Milestone 01 project skeleton has been created.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
 - `apps/web` has a minimal demo-login candidate profile editor, combined import view, action-oriented job queue, focused job detail view, manual job enrichment form, AI review action, and application pipeline editor.
 - The web app primary navigation is now `Profile`, `Import`, and `Job Queue`.
+- Milestone 13 cleaned the AppShell/auth experience: signed-out users see a focused login card, while signed-in users see a compact account area with sign-out in the header.
+- Global success and error messages now render in a consistent top alert area instead of appearing detached below the workspace.
 - The Job Queue groups active jobs by action state, including needs full description, ready for AI review, reviewed apply/strong matches, reviewed maybe/clarify, in pipeline, and other active jobs.
 - Job Detail separates enrichment, AI review, pipeline fields, and full description from queue triage so the long job list no longer competes with the selected job editor.
+- Job Queue rows and Job Detail are visually cleaner, with a clearer selected job state, compact badges, primary actions near the top of detail, and less visual weight for secondary metadata.
 - Manual job creation is secondary behind a collapsed `New manual job` section on the Job Queue.
+- Secondary forms such as paste extraction, simulated email import, pipeline editing, long full descriptions, and full-description enrichment are progressively disclosed so the main workflow appears first.
 - Imported email Prisma models exist for simulated Gmail/job-alert messages.
 - Jobs can optionally reference the imported email that produced them.
 - Authenticated import routes exist:
@@ -132,6 +136,7 @@ Milestone 01 project skeleton has been created.
 - Gmail status returns safe account info only and never returns tokens.
 - Manual Gmail import uses stored Gmail OAuth credentials to fetch recent messages, deduplicates them into `ImportedEmail`, and does not automatically extract jobs.
 - The `Imports` view includes Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, import history, and explicit email extraction.
+- Gmail connection state is clearer in the web app: disconnected users see a single connect action and helper text, while connected users see account details, last import, a disconnect action, and the Gmail import form.
 
 Not implemented yet:
 

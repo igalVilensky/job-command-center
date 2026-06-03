@@ -27,10 +27,13 @@ export function PipelineForm({
   updateField
 }: PipelineFormProps) {
   return (
-    <section className="detail-section" aria-label="Pipeline">
+    <details className="detail-section pipeline-disclosure" aria-label="Pipeline">
+      <summary>
+        <span>Pipeline</span>
+        <small>{job.applicationStatus ?? "not_started"}</small>
+      </summary>
       <form className="pipeline-form detail-form" onSubmit={onSubmit}>
         <div className="section-heading">
-          <h4>Pipeline</h4>
           <button disabled={isBusy || !user} type="submit">
             Save pipeline
           </button>
@@ -104,6 +107,6 @@ export function PipelineForm({
           </div>
         </dl>
       </form>
-    </section>
+    </details>
   );
 }

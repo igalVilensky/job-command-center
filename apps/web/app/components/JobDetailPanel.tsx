@@ -54,7 +54,7 @@ export function JobDetailPanel({
 
   return (
     <section className="job-detail focused-detail" aria-label="Job detail">
-      <section className="detail-section">
+      <section className="detail-section job-summary-card">
         <div className="section-heading">
           <div>
             <h3>{job.title}</h3>
@@ -64,6 +64,25 @@ export function JobDetailPanel({
             <em>{job.status}</em>
             <em>{job.sourceQuality}</em>
           </span>
+        </div>
+
+        <div className="button-row job-summary-actions">
+          <button
+            className="button-primary"
+            disabled={isBusy || !user}
+            type="button"
+            onClick={() => onRunReview(job.id)}
+          >
+            Run AI review
+          </button>
+          <button
+            className="button-danger"
+            disabled={isBusy || !user}
+            type="button"
+            onClick={() => onArchiveJob(job.id)}
+          >
+            Archive
+          </button>
         </div>
 
         <dl className="detail-list">
@@ -100,20 +119,6 @@ export function JobDetailPanel({
             </dd>
           </div>
         </dl>
-      </section>
-
-      <section className="detail-section primary-actions">
-        <div className="section-heading">
-          <h4>Primary actions</h4>
-        </div>
-        <div className="button-row">
-          <button disabled={isBusy || !user} type="button" onClick={() => onRunReview(job.id)}>
-            Run AI review
-          </button>
-          <button disabled={isBusy || !user} type="button" onClick={() => onArchiveJob(job.id)}>
-            Archive
-          </button>
-        </div>
       </section>
 
       <JobEnrichmentForm

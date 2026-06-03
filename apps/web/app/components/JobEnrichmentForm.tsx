@@ -4,8 +4,7 @@ import {
   type Job,
   type JobEnrichmentFormState,
   type User,
-  enrichmentSourceQualityOptions,
-  sourceNeedsFullDescription
+  enrichmentSourceQualityOptions
 } from "./types";
 
 type JobEnrichmentFormProps = {
@@ -27,7 +26,7 @@ export function JobEnrichmentForm({
   onSaveAndReview,
   updateField
 }: JobEnrichmentFormProps) {
-  const needsDescription = sourceNeedsFullDescription(job);
+  const needsDescription = job.sourceQuality !== "full_description";
 
   return (
     <details className="detail-section" open={needsDescription}>

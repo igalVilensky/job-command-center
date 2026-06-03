@@ -54,25 +54,34 @@ function JobQueueCard({
 
           <span className="badge-row">
             {review ? (
-              <em>
+              <em className="badge-accent">
                 {review.score} / {review.decision}
               </em>
             ) : (
-              <em>No review</em>
+              <em className="badge-muted">No review</em>
             )}
             <em>{job.sourceQuality}</em>
-            <em>{job.status}</em>
           </span>
         </div>
 
         <div className="job-row-actions">
-          <button type="button" onClick={() => onOpenJob(job)}>
+          <button className="button-primary" type="button" onClick={() => onOpenJob(job)}>
             Open
           </button>
-          <button disabled={isBusy || !user} type="button" onClick={() => onRunReview(job.id)}>
-            Run review
+          <button
+            className="button-secondary button-small"
+            disabled={isBusy || !user}
+            type="button"
+            onClick={() => onRunReview(job.id)}
+          >
+            Review
           </button>
-          <button disabled={isBusy || !user} type="button" onClick={() => onArchiveJob(job.id)}>
+          <button
+            className="button-danger button-small"
+            disabled={isBusy || !user}
+            type="button"
+            onClick={() => onArchiveJob(job.id)}
+          >
             Archive
           </button>
         </div>

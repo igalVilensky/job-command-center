@@ -71,6 +71,9 @@ export function ImportPanel({
   updateImportedEmailField,
   updateGmailImportField
 }: ImportPanelProps) {
+  const gmailConnected = Boolean(gmailStatus?.connected);
+  const gmailStatusLabel = gmailConnected ? "Connected" : "Disconnected";
+
   return (
     <section className="profile-panel">
       <div className="section-heading">
@@ -80,45 +83,48 @@ export function ImportPanel({
         </button>
       </div>
 
-      <form className="job-form" onSubmit={onExtractJobs}>
-        <div className="section-heading">
-          <h3>Paste Extraction</h3>
-        </div>
+      <details className="disclosure-panel">
+        <summary>
+          <span>Paste Extraction</span>
+          <small>Manual fallback</small>
+        </summary>
 
-        <div className="form-grid">
-          <label>
-            Source type
-            <input
-              value={importForm.sourceType}
-              onChange={(event) => updateImportField("sourceType", event.target.value)}
-            />
-          </label>
+        <form className="job-form disclosure-form" onSubmit={onExtractJobs}>
+          <div className="form-grid">
+            <label>
+              Source type
+              <input
+                value={importForm.sourceType}
+                onChange={(event) => updateImportField("sourceType", event.target.value)}
+              />
+            </label>
 
-          <label>
-            Source name
-            <input
-              value={importForm.sourceName}
-              onChange={(event) => updateImportField("sourceName", event.target.value)}
-            />
-          </label>
+            <label>
+              Source name
+              <input
+                value={importForm.sourceName}
+                onChange={(event) => updateImportField("sourceName", event.target.value)}
+              />
+            </label>
 
-          <label className="wide">
-            Pasted job or email text
-            <textarea
-              required
-              value={importForm.sourceText}
-              onChange={(event) => updateImportField("sourceText", event.target.value)}
-              rows={12}
-            />
-          </label>
-        </div>
+            <label className="wide">
+              Pasted job or email text
+              <textarea
+                required
+                value={importForm.sourceText}
+                onChange={(event) => updateImportField("sourceText", event.target.value)}
+                rows={10}
+              />
+            </label>
+          </div>
 
-        <div className="button-row">
-          <button disabled={isBusy || !user || !importForm.sourceText.trim()} type="submit">
-            Extract jobs
-          </button>
-        </div>
-      </form>
+          <div className="button-row">
+            <button disabled={isBusy || !user || !importForm.sourceText.trim()} type="submit">
+              Extract jobs
+            </button>
+          </div>
+        </form>
+      </details>
 
       {importWarnings.length > 0 ? (
         <div className="description-block">
@@ -156,8 +162,10 @@ export function ImportPanel({
       <section className="description-block">
         <div className="section-heading">
           <h3>Gmail Connection</h3>
-          <span className="badge-row">
-            <em>{gmailStatus?.connected ? "connected" : "disconnected"}</em>
+          <span className="badge-row" aria-label={`Gmail ${gmailStatusLabel}`}>
+            <em className={gmailConnected ? "badge-success" : "badge-muted"}>
+              {gmailStatusLabel}
+            </em>
           </span>
         </div>
 
@@ -176,50 +184,70 @@ export function ImportPanel({
           </div>
         </dl>
 
+        {!gmailConnected ? (
+          <p className="muted">Connect Gmail before importing.</p>
+        ) : null}
+
         <div className="button-row">
-          <button disabled={isBusy || !user} type="button" onClick={onStartGmailOAuth}>
-            Connect Gmail
-          </button>
-          <button
-            disabled={isBusy || !user || !gmailStatus?.connected}
-            type="button"
-            onClick={onDisconnectGmail}
-          >
-            Disconnect
-          </button>
+          {gmailConnected ? (
+            <button
+              className="button-danger"
+              disabled={isBusy || !user}
+              type="button"
+              onClick={onDisconnectGmail}
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              className="button-primary"
+              disabled={isBusy || !user}
+              type="button"
+              onClick={onStartGmailOAuth}
+            >
+              Connect Gmail
+            </button>
+          )}
         </div>
       </section>
 
-      <form className="job-form" onSubmit={onImportFromGmail}>
-        <div className="section-heading">
-          <h3>Gmail Import</h3>
-        </div>
+      <details className="disclosure-panel" open={gmailConnected}>
+        <summary>
+          <span>Gmail Import</span>
+          <small>{gmailConnected ? "Ready" : "Connect Gmail first"}</small>
+        </summary>
 
-        <div className="form-grid">
-          <label>
-            Gmail query
-            <input
-              value={gmailImportForm.query}
-              onChange={(event) => updateGmailImportField("query", event.target.value)}
-            />
-          </label>
+        {gmailConnected ? (
+          <form className="job-form disclosure-form" onSubmit={onImportFromGmail}>
+            <div className="form-grid">
+              <label>
+                Gmail query
+                <input
+                  value={gmailImportForm.query}
+                  onChange={(event) => updateGmailImportField("query", event.target.value)}
+                />
+              </label>
 
-          <label>
-            Max results
-            <input
-              value={gmailImportForm.maxResults}
-              onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
-              inputMode="numeric"
-            />
-          </label>
-        </div>
+              <label>
+                Max results
+                <input
+                  value={gmailImportForm.maxResults}
+                  onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
+                  inputMode="numeric"
+                />
+              </label>
+            </div>
 
-        <div className="button-row">
-          <button disabled={isBusy || !user || !gmailStatus?.connected} type="submit">
-            Import from Gmail
-          </button>
-        </div>
-      </form>
+            <div className="button-row">
+              <button disabled={isBusy || !user} type="submit">
+                Import from Gmail
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="muted">Connect Gmail before importing.</p>
+        )}
+      </details>
 
       {gmailImportResult ? (
         <div className="description-block">
@@ -241,92 +269,95 @@ export function ImportPanel({
         </div>
       ) : null}
 
-      <form className="job-form" onSubmit={onSimulateImportedEmail}>
-        <div className="section-heading">
-          <h3>Simulated Email Import</h3>
-        </div>
+      <details className="disclosure-panel">
+        <summary>
+          <span>Simulated Email Import</span>
+          <small>Local testing</small>
+        </summary>
 
-        <div className="form-grid">
-          <label>
-            Provider message ID
-            <input
-              required
-              value={importedEmailForm.providerMessageId}
-              onChange={(event) =>
-                updateImportedEmailField("providerMessageId", event.target.value)
+        <form className="job-form disclosure-form" onSubmit={onSimulateImportedEmail}>
+          <div className="form-grid">
+            <label>
+              Provider message ID
+              <input
+                required
+                value={importedEmailForm.providerMessageId}
+                onChange={(event) =>
+                  updateImportedEmailField("providerMessageId", event.target.value)
+                }
+              />
+            </label>
+
+            <label>
+              From email
+              <input
+                value={importedEmailForm.fromEmail}
+                onChange={(event) => updateImportedEmailField("fromEmail", event.target.value)}
+                type="email"
+              />
+            </label>
+
+            <label>
+              From name
+              <input
+                value={importedEmailForm.fromName}
+                onChange={(event) => updateImportedEmailField("fromName", event.target.value)}
+              />
+            </label>
+
+            <label>
+              Received at
+              <input
+                value={importedEmailForm.receivedAt}
+                onChange={(event) => updateImportedEmailField("receivedAt", event.target.value)}
+                type="datetime-local"
+              />
+            </label>
+
+            <label>
+              Subject
+              <input
+                required
+                value={importedEmailForm.subject}
+                onChange={(event) => updateImportedEmailField("subject", event.target.value)}
+              />
+            </label>
+
+            <label>
+              Label
+              <input
+                value={importedEmailForm.sourceLabel}
+                onChange={(event) => updateImportedEmailField("sourceLabel", event.target.value)}
+              />
+            </label>
+
+            <label className="wide">
+              Email body
+              <textarea
+                required
+                value={importedEmailForm.bodyText}
+                onChange={(event) => updateImportedEmailField("bodyText", event.target.value)}
+                rows={10}
+              />
+            </label>
+          </div>
+
+          <div className="button-row">
+            <button
+              disabled={
+                isBusy ||
+                !user ||
+                !importedEmailForm.providerMessageId.trim() ||
+                !importedEmailForm.subject.trim() ||
+                !importedEmailForm.bodyText.trim()
               }
-            />
-          </label>
-
-          <label>
-            From email
-            <input
-              value={importedEmailForm.fromEmail}
-              onChange={(event) => updateImportedEmailField("fromEmail", event.target.value)}
-              type="email"
-            />
-          </label>
-
-          <label>
-            From name
-            <input
-              value={importedEmailForm.fromName}
-              onChange={(event) => updateImportedEmailField("fromName", event.target.value)}
-            />
-          </label>
-
-          <label>
-            Received at
-            <input
-              value={importedEmailForm.receivedAt}
-              onChange={(event) => updateImportedEmailField("receivedAt", event.target.value)}
-              type="datetime-local"
-            />
-          </label>
-
-          <label>
-            Subject
-            <input
-              required
-              value={importedEmailForm.subject}
-              onChange={(event) => updateImportedEmailField("subject", event.target.value)}
-            />
-          </label>
-
-          <label>
-            Label
-            <input
-              value={importedEmailForm.sourceLabel}
-              onChange={(event) => updateImportedEmailField("sourceLabel", event.target.value)}
-            />
-          </label>
-
-          <label className="wide">
-            Email body
-            <textarea
-              required
-              value={importedEmailForm.bodyText}
-              onChange={(event) => updateImportedEmailField("bodyText", event.target.value)}
-              rows={12}
-            />
-          </label>
-        </div>
-
-        <div className="button-row">
-          <button
-            disabled={
-              isBusy ||
-              !user ||
-              !importedEmailForm.providerMessageId.trim() ||
-              !importedEmailForm.subject.trim() ||
-              !importedEmailForm.bodyText.trim()
-            }
-            type="submit"
-          >
-            Simulate import
-          </button>
-        </div>
-      </form>
+              type="submit"
+            >
+              Simulate import
+            </button>
+          </div>
+        </form>
+      </details>
 
       <div className="jobs-layout">
         <section>
@@ -359,7 +390,12 @@ export function ImportPanel({
 
         <section className="job-detail" aria-label="Imported email detail">
           {selectedImportedEmail ? (
-            <>
+            <details className="email-detail" open>
+              <summary>
+                <span>Selected email</span>
+                <small>{selectedImportedEmail.extractionStatus}</small>
+              </summary>
+
               <div className="section-heading">
                 <div>
                   <h3>{selectedImportedEmail.subject}</h3>
@@ -467,7 +503,7 @@ export function ImportPanel({
                   ))}
                 </ul>
               </div>
-            </>
+            </details>
           ) : (
             <p className="muted">Select an imported email to view details.</p>
           )}
