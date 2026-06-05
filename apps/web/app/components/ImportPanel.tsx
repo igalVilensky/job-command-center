@@ -77,7 +77,7 @@ export function ImportPanel({
   return (
     <section className="profile-panel">
       <div className="section-heading">
-        <h2>Import</h2>
+        <h2>Imports</h2>
         <button disabled={isBusy || !user} type="button" onClick={() => void onRefreshImportedEmails()}>
           Refresh imports
         </button>
@@ -85,7 +85,7 @@ export function ImportPanel({
 
       <details className="disclosure-panel">
         <summary>
-          <span>Paste Extraction</span>
+          <span>Paste job text</span>
           <small>Manual fallback</small>
         </summary>
 
@@ -161,7 +161,7 @@ export function ImportPanel({
 
       <section className="description-block">
         <div className="section-heading">
-          <h3>Gmail Connection</h3>
+          <h3>Gmail</h3>
           <span className="badge-row" aria-label={`Gmail ${gmailStatusLabel}`}>
             <em className={gmailConnected ? "badge-success" : "badge-muted"}>
               {gmailStatusLabel}
@@ -169,36 +169,64 @@ export function ImportPanel({
           </span>
         </div>
 
-        <dl className="detail-list">
-          <div>
-            <dt>Account</dt>
-            <dd>{gmailStatus?.emailAddress ?? "Not connected"}</dd>
-          </div>
-          <div>
-            <dt>Name</dt>
-            <dd>{gmailStatus?.displayName ?? "Not set"}</dd>
-          </div>
-          <div>
-            <dt>Last import</dt>
-            <dd>{formatDate(gmailStatus?.lastSyncAt ?? null)}</dd>
-          </div>
-        </dl>
+        {gmailConnected ? (
+          <>
+            <dl className="detail-list">
+              <div>
+                <dt>Account</dt>
+                <dd>{gmailStatus?.emailAddress ?? "Not connected"}</dd>
+              </div>
+              <div>
+                <dt>Name</dt>
+                <dd>{gmailStatus?.displayName ?? "Not set"}</dd>
+              </div>
+              <div>
+                <dt>Last import</dt>
+                <dd>{formatDate(gmailStatus?.lastSyncAt ?? null)}</dd>
+              </div>
+            </dl>
 
-        {!gmailConnected ? (
-          <p className="muted">Connect Gmail before importing.</p>
-        ) : null}
+            <div className="button-row">
+              <button
+                className="button-danger"
+                disabled={isBusy || !user}
+                type="button"
+                onClick={onDisconnectGmail}
+              >
+                Disconnect
+              </button>
+            </div>
 
-        <div className="button-row">
-          {gmailConnected ? (
-            <button
-              className="button-danger"
-              disabled={isBusy || !user}
-              type="button"
-              onClick={onDisconnectGmail}
-            >
-              Disconnect
-            </button>
-          ) : (
+            <form className="job-form gmail-import-form" onSubmit={onImportFromGmail}>
+              <div className="form-grid">
+                <label>
+                  Gmail query
+                  <input
+                    value={gmailImportForm.query}
+                    onChange={(event) => updateGmailImportField("query", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Max results
+                  <input
+                    value={gmailImportForm.maxResults}
+                    onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user} type="submit">
+                  Import from Gmail
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <div className="connect-prompt">
+            <p className="muted">Connect Gmail to import recent job alert emails.</p>
             <button
               className="button-primary"
               disabled={isBusy || !user}
@@ -207,47 +235,9 @@ export function ImportPanel({
             >
               Connect Gmail
             </button>
-          )}
-        </div>
-      </section>
-
-      <details className="disclosure-panel" open={gmailConnected}>
-        <summary>
-          <span>Gmail Import</span>
-          <small>{gmailConnected ? "Ready" : "Connect Gmail first"}</small>
-        </summary>
-
-        {gmailConnected ? (
-          <form className="job-form disclosure-form" onSubmit={onImportFromGmail}>
-            <div className="form-grid">
-              <label>
-                Gmail query
-                <input
-                  value={gmailImportForm.query}
-                  onChange={(event) => updateGmailImportField("query", event.target.value)}
-                />
-              </label>
-
-              <label>
-                Max results
-                <input
-                  value={gmailImportForm.maxResults}
-                  onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
-                  inputMode="numeric"
-                />
-              </label>
-            </div>
-
-            <div className="button-row">
-              <button disabled={isBusy || !user} type="submit">
-                Import from Gmail
-              </button>
-            </div>
-          </form>
-        ) : (
-          <p className="muted">Connect Gmail before importing.</p>
+          </div>
         )}
-      </details>
+      </section>
 
       {gmailImportResult ? (
         <div className="description-block">
@@ -271,8 +261,8 @@ export function ImportPanel({
 
       <details className="disclosure-panel">
         <summary>
-          <span>Simulated Email Import</span>
-          <small>Local testing</small>
+          <span>Developer / simulated import</span>
+          <small>Local testing only</small>
         </summary>
 
         <form className="job-form disclosure-form" onSubmit={onSimulateImportedEmail}>

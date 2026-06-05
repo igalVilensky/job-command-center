@@ -12,6 +12,7 @@ import {
 type PipelineFormProps = {
   job: Job;
   form: PipelineFormState;
+  formId?: string;
   user: User | null;
   isBusy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -21,18 +22,22 @@ type PipelineFormProps = {
 export function PipelineForm({
   job,
   form,
+  formId,
   user,
   isBusy,
   onSubmit,
   updateField
 }: PipelineFormProps) {
   return (
-    <details className="detail-section pipeline-disclosure" aria-label="Pipeline">
-      <summary>
-        <span>Pipeline</span>
-        <small>{job.applicationStatus ?? "not_started"}</small>
-      </summary>
-      <form className="pipeline-form detail-form" onSubmit={onSubmit}>
+    <section className="detail-section pipeline-section" aria-label="Pipeline">
+      <div className="section-heading">
+        <div>
+          <h4>Pipeline</h4>
+          <p className="muted">{job.applicationStatus ?? "not_started"}</p>
+        </div>
+      </div>
+
+      <form className="pipeline-form detail-form" id={formId} onSubmit={onSubmit}>
         <div className="section-heading">
           <button disabled={isBusy || !user} type="submit">
             Save pipeline
@@ -107,6 +112,6 @@ export function PipelineForm({
           </div>
         </dl>
       </form>
-    </details>
+    </section>
   );
 }

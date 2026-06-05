@@ -23,9 +23,10 @@ type AppShellProps = {
 };
 
 const navItems: { view: ActiveView; label: string }[] = [
+  { view: "dashboard", label: "Dashboard" },
+  { view: "jobs", label: "Jobs" },
+  { view: "imports", label: "Imports" },
   { view: "profile", label: "Profile" },
-  { view: "import", label: "Import" },
-  { view: "jobs", label: "Job Queue" }
 ];
 
 export function AppShell({
@@ -42,49 +43,25 @@ export function AppShell({
   onLogout,
   children
 }: AppShellProps) {
-  return (
-    <main className="page-shell" data-api-url={apiUrl}>
-      <header className="app-header">
-        <div className="brand-block">
-          <p className="eyebrow">Milestone 13</p>
-          <h1>Job Command Center</h1>
-          <p className="api-pill">API: {apiUrl}</p>
-        </div>
-
-        {user ? (
-          <div className="account-area" aria-label="Account">
-            <span className="account-chip">Signed in as {user.email}</span>
-            <button className="button-secondary" disabled={isBusy} type="button" onClick={onLogout}>
-              Sign out
-            </button>
+  if (!user) {
+    return (
+      <main className="page-shell signed-out-shell" data-api-url={apiUrl}>
+        <header className="signed-out-header">
+          <div className="brand-block">
+            <p className="eyebrow">Milestone 14</p>
+            <h1>Job Command Center</h1>
+            <p className="api-pill">API: {apiUrl}</p>
           </div>
+        </header>
+
+        {status || error ? (
+          <section className="alert-stack" aria-live="polite">
+            {status ? <p className="status success">{status}</p> : null}
+            {error ? <p className="status error">{error}</p> : null}
+          </section>
         ) : null}
-      </header>
 
-      {user ? (
-        <nav className="tab-row" aria-label="Primary">
-          {navItems.map((item) => (
-            <button
-              className={activeView === item.view ? "active" : ""}
-              key={item.view}
-              type="button"
-              onClick={() => setActiveView(item.view)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      ) : null}
-
-      {status || error ? (
-        <section className="alert-stack" aria-live="polite">
-          {status ? <p className="status success">{status}</p> : null}
-          {error ? <p className="status error">{error}</p> : null}
-        </section>
-      ) : null}
-
-      <section className="workspace" aria-live="polite">
-        {!user ? (
+        <section className="workspace" aria-live="polite">
           <form className="login-panel" onSubmit={onLogin}>
             <div>
               <h2>Demo Login</h2>
@@ -122,10 +99,59 @@ export function AppShell({
               </button>
             </div>
           </form>
-        ) : (
-          children
-        )}
-      </section>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page-shell signed-in-shell" data-api-url={apiUrl}>
+      <aside className="app-sidebar" aria-label="Primary">
+        <div className="sidebar-brand">
+          <p className="eyebrow">Milestone 14</p>
+          <strong>JCC</strong>
+        </div>
+
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <button
+              className={activeView === item.view ? "active" : ""}
+              key={item.view}
+              type="button"
+              onClick={() => setActiveView(item.view)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="app-main">
+        <header className="app-header">
+          <div className="brand-block">
+            <h1>Job Command Center</h1>
+            <p className="api-pill">API: {apiUrl}</p>
+          </div>
+
+          <div className="account-area" aria-label="Account">
+            <span className="account-chip">{user.email}</span>
+            <button className="button-secondary" disabled={isBusy} type="button" onClick={onLogout}>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        {status || error ? (
+          <section className="alert-stack" aria-live="polite">
+            {status ? <p className="status success">{status}</p> : null}
+            {error ? <p className="status error">{error}</p> : null}
+          </section>
+        ) : null}
+
+        <section className="workspace" aria-live="polite">
+          {children}
+        </section>
+      </div>
     </main>
   );
 }

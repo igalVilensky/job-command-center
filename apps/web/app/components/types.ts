@@ -213,13 +213,32 @@ export type PipelineFormState = {
   followUpDate: string;
 };
 
-export type ActiveView = "profile" | "import" | "jobs";
+export type ActiveView = "dashboard" | "jobs" | "imports" | "profile";
+
+export type QueueFilter =
+  | "all"
+  | "needs_description"
+  | "ready_for_review"
+  | "apply"
+  | "maybe"
+  | "follow_up";
+
+export type JobDetailTab = "overview" | "review" | "description" | "pipeline" | "enrichment";
 
 export type QueueGroup = {
   key: string;
   label: string;
   description: string;
   jobs: Job[];
+};
+
+export const queueFilterLabels: Record<QueueFilter, string> = {
+  all: "All active jobs",
+  needs_description: "Needs full description",
+  ready_for_review: "Ready for review",
+  apply: "Strong matches / Apply",
+  maybe: "Maybe / clarify",
+  follow_up: "Pipeline follow-ups"
 };
 
 export const emptyProfileForm: ProfileFormState = {
@@ -507,6 +526,37 @@ export const jobToEnrichmentForm = (job: Job | null): JobEnrichmentFormState => 
 export const sourceNeedsFullDescription = (job: Job) =>
   job.status === "needs_full_description" || incompleteSourceQualities.includes(job.sourceQuality);
 
+export const jobNeedsReview = (job: Job) =>
+  !sourceNeedsFullDescription(job) &&
+  (!job.latestAiReview || job.status === "ready_for_analysis");
+
+export const jobIsStrongMatch = (job: Job) => {
+  const review = job.latestAiReview;
+
+  return Boolean(review && (review.decision === "apply" || review.score >= 75));
+};
+
+export const jobNeedsClarification = (job: Job) => {
+  const review = job.latestAiReview;
+
+  if (jobIsStrongMatch(job)) {
+    return false;
+  }
+
+  return Boolean(
+    review &&
+      (review.decision === "maybe" ||
+        review.decision === "review_manually" ||
+        review.clarificationQuestions.length > 0 ||
+        (job.userDecision ?? "") === "maybe")
+  );
+};
+
+export const jobNeedsPipelineFollowUp = (job: Job) =>
+  (job.applicationStatus ?? "") === "follow_up_needed" ||
+  Boolean(job.followUpDate) ||
+  Boolean(job.nextAction?.trim());
+
 export const jobIsInPipeline = (job: Job) => {
   const applicationStatus = job.applicationStatus ?? "not_started";
   const userDecision = job.userDecision ?? "undecided";
@@ -515,6 +565,46 @@ export const jobIsInPipeline = (job: Job) => {
     applicationStatus !== "not_started" ||
     ["interested", "maybe", "applied", "interviewing"].includes(userDecision)
   );
+};
+
+export const getJobNextAction = (job: Job) => {
+  if (sourceNeedsFullDescription(job)) {
+    return "Enrich";
+  }
+
+  if (jobNeedsReview(job)) {
+    return "Review";
+  }
+
+  if (jobNeedsPipelineFollowUp(job)) {
+    return "Follow up";
+  }
+
+  if (jobIsStrongMatch(job)) {
+    return "Decide";
+  }
+
+  if (jobNeedsClarification(job)) {
+    return "Clarify";
+  }
+
+  if (jobIsInPipeline(job)) {
+    return "Pipeline";
+  }
+
+  return "Triage";
+};
+
+export const defaultJobDetailTab = (job: Job): JobDetailTab => {
+  if (job.latestAiReview) {
+    return "review";
+  }
+
+  if (sourceNeedsFullDescription(job)) {
+    return "enrichment";
+  }
+
+  return "overview";
 };
 
 export const formatSalary = (job: Job) => {
@@ -585,26 +675,22 @@ export const groupJobsByQueueState = (jobs: Job[]): QueueGroup[] => {
   const byKey = new Map(groups.map((group) => [group.key, group]));
 
   jobs.forEach((job) => {
-    const review = job.latestAiReview;
-    const decision = review?.decision ?? "";
-    const score = review?.score ?? null;
-
     if (sourceNeedsFullDescription(job)) {
       byKey.get("needs_description")?.jobs.push(job);
       return;
     }
 
-    if (job.status === "ready_for_analysis") {
+    if (jobNeedsReview(job)) {
       byKey.get("ready_for_review")?.jobs.push(job);
       return;
     }
 
-    if (decision === "apply" || (score !== null && score >= 75)) {
+    if (jobIsStrongMatch(job)) {
       byKey.get("apply")?.jobs.push(job);
       return;
     }
 
-    if (decision === "maybe" || decision === "review_manually") {
+    if (jobNeedsClarification(job)) {
       byKey.get("maybe")?.jobs.push(job);
       return;
     }

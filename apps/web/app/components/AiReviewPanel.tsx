@@ -1,4 +1,4 @@
-import { type Job, type User } from "./types";
+import { type Job, type User, previewText } from "./types";
 import { FitBreakdownPanel } from "./FitBreakdownPanel";
 
 type AiReviewPanelProps = {
@@ -36,11 +36,14 @@ export function AiReviewPanel({ job, user, isBusy, onRunReview }: AiReviewPanelP
               <dd>{review.decision}</dd>
             </div>
           </dl>
-          <p className="muted">
-            Overall score and decision are the final result. Fit breakdown shows dimension-level
-            reasoning.
-          </p>
-          <p>{review.reviewText}</p>
+          <p className="review-short">{previewText(review.reviewText, 320)}</p>
+
+          {review.reviewText.length > 320 ? (
+            <details className="inline-disclosure">
+              <summary>Full review text</summary>
+              <p>{review.reviewText}</p>
+            </details>
+          ) : null}
 
           <h5>Fit Breakdown</h5>
           <FitBreakdownPanel breakdown={review.fitBreakdownJson} />

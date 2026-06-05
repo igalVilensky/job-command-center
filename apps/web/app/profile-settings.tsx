@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { AppShell } from "./components/AppShell";
 import { CandidateProfilePanel } from "./components/CandidateProfilePanel";
+import { DashboardPanel } from "./components/DashboardPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { JobCreateForm } from "./components/JobCreateForm";
 import { JobDetailPanel } from "./components/JobDetailPanel";
@@ -21,14 +22,17 @@ import {
   type ImportedEmail,
   type ImportedEmailFormState,
   type Job,
+  type JobDetailTab,
   type JobEnrichmentFormState,
   type JobFormState,
   type PipelineFormState,
   type Profile,
   type ProfileFormState,
+  type QueueFilter,
   type User,
   cvToForm,
   defaultGmailImportForm,
+  defaultJobDetailTab,
   emptyCvForm,
   emptyImportedEmailForm,
   emptyImportForm,
@@ -37,8 +41,14 @@ import {
   emptyProfileForm,
   jobToEnrichmentForm,
   jobToPipelineForm,
+  jobIsStrongMatch,
+  jobNeedsClarification,
+  jobNeedsPipelineFollowUp,
+  jobNeedsReview,
   previewText,
   profileToForm,
+  queueFilterLabels,
+  sourceNeedsFullDescription,
   textToLanguages,
   textToList
 } from "./components/types";
@@ -66,7 +76,7 @@ const parseResponse = async <T,>(response: Response): Promise<T> => {
 };
 
 export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
-  const [activeView, setActiveView] = useState<ActiveView>("profile");
+  const [activeView, setActiveView] = useState<ActiveView>("dashboard");
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     email: "demo@jobcc.local",
     password: "password123"
@@ -94,9 +104,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
   const [gmailImportResult, setGmailImportResult] = useState<GmailImportResult | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [jobDetailTab, setJobDetailTab] = useState<JobDetailTab>("overview");
   const [selectedImportedEmail, setSelectedImportedEmail] = useState<ImportedEmail | null>(null);
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [jobSearchQuery, setJobSearchQuery] = useState("");
   const [userDecisionFilter, setUserDecisionFilter] = useState("");
   const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
+  const [showNewJobForm, setShowNewJobForm] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -154,10 +168,33 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     return data.job;
   };
 
-  const openJob = (job: Job) => {
+  const navigateToView = (view: ActiveView) => {
+    setActiveView(view);
+    setShowNewJobForm(false);
+
+    if (view === "jobs") {
+      setSelectedJob(null);
+      return;
+    }
+
+    setSelectedJob(null);
+  };
+
+  const openJob = (job: Job, tab?: JobDetailTab) => {
     setSelectedJob(job);
+    setJobDetailTab(tab ?? defaultJobDetailTab(job));
     setActiveView("jobs");
     void loadJob(job.id);
+  };
+
+  const openJobsWithFilter = (filter: QueueFilter) => {
+    setQueueFilter(filter);
+    setJobSearchQuery("");
+    setUserDecisionFilter("");
+    setApplicationStatusFilter("");
+    setSelectedJob(null);
+    setShowNewJobForm(false);
+    setActiveView("jobs");
   };
 
   const selectImportedEmail = (email: ImportedEmail) => {
@@ -196,7 +233,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       return;
     }
 
-    setActiveView("import");
+    setActiveView("imports");
 
     if (gmail === "connected") {
       setStatus("Gmail connected");
@@ -234,6 +271,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         loadImportedEmails(),
         loadGmailStatus()
       ]);
+      setActiveView("dashboard");
       setStatus("Signed in");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed");
@@ -359,6 +397,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
       setJobForm(emptyJobForm);
       setSelectedJob(data.job);
+      setJobDetailTab(defaultJobDetailTab(data.job));
+      setShowNewJobForm(false);
       await loadJobs();
       setStatus("Job created");
     } catch (createError) {
@@ -389,6 +429,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setImportWarnings(data.warnings);
       if (data.jobs[0]) {
         setSelectedJob(data.jobs[0]);
+        setJobDetailTab(defaultJobDetailTab(data.jobs[0]));
       }
       await loadJobs();
       setStatus(`Extracted ${data.jobs.length} job${data.jobs.length === 1 ? "" : "s"}`);
@@ -535,6 +576,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setSelectedImportedEmail(data.email);
       if (data.jobs[0]) {
         setSelectedJob(data.jobs[0]);
+        setJobDetailTab(defaultJobDetailTab(data.jobs[0]));
       }
       await Promise.all([loadImportedEmails(), loadJobs()]);
       setStatus(
@@ -561,6 +603,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setSelectedJob(data.job);
+      setJobDetailTab("review");
       await loadJobs();
       setStatus(`Review complete: ${data.review.decision}`);
     } catch (reviewError) {
@@ -596,6 +639,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       savedJob = data.job;
       setSelectedJob(data.job);
       setEnrichmentForm(jobToEnrichmentForm(data.job));
+      setJobDetailTab("enrichment");
       await loadJobs();
 
       if (runReview) {
@@ -608,6 +652,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
         setSelectedJob(reviewData.job);
         setEnrichmentForm(jobToEnrichmentForm(reviewData.job));
+        setJobDetailTab("review");
         await loadJobs();
         setStatus(`Enrichment saved. Review complete: ${reviewData.review.decision}`);
         return;
@@ -643,6 +688,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setSelectedJob((current) => (current?.id === id ? null : current));
+      setJobDetailTab("overview");
       await loadJobs();
       setStatus("Job archived");
     } catch (archiveError) {
@@ -652,9 +698,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
-  const handlePipelineSave = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
+  const savePipeline = async () => {
     if (!selectedJob) {
       return;
     }
@@ -676,6 +720,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       });
 
       setSelectedJob(data.job);
+      setJobDetailTab("pipeline");
       await loadJobs();
       setStatus("Pipeline saved");
     } catch (saveError) {
@@ -683,6 +728,11 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const handlePipelineSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await savePipeline();
   };
 
   const handleLogout = async () => {
@@ -703,6 +753,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setGmailStatus(null);
       setGmailImportResult(null);
       setSelectedJob(null);
+      setJobDetailTab("overview");
       setSelectedImportedEmail(null);
       setExtractedJobs([]);
       setImportedEmailExtractedJobs([]);
@@ -716,8 +767,12 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setImportedEmailForm(emptyImportedEmailForm);
       setGmailImportForm(defaultGmailImportForm);
       setPipelineForm(emptyPipelineForm);
+      setActiveView("dashboard");
+      setQueueFilter("all");
+      setJobSearchQuery("");
       setUserDecisionFilter("");
       setApplicationStatusFilter("");
+      setShowNewJobForm(false);
       setStatus("Signed out");
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : "Logout failed");
@@ -794,14 +849,55 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }));
   };
 
+  const matchesQueueFilter = (job: Job) => {
+    if (queueFilter === "all") {
+      return true;
+    }
+
+    if (queueFilter === "needs_description") {
+      return sourceNeedsFullDescription(job);
+    }
+
+    if (queueFilter === "ready_for_review") {
+      return jobNeedsReview(job);
+    }
+
+    if (queueFilter === "apply") {
+      return jobIsStrongMatch(job);
+    }
+
+    if (queueFilter === "maybe") {
+      return jobNeedsClarification(job);
+    }
+
+    return jobNeedsPipelineFollowUp(job);
+  };
+
+  const normalizedSearch = jobSearchQuery.trim().toLowerCase();
   const filteredJobs = jobs.filter((job) => {
     const matchesDecision =
       !userDecisionFilter || (job.userDecision ?? "undecided") === userDecisionFilter;
     const matchesApplicationStatus =
       !applicationStatusFilter ||
       (job.applicationStatus ?? "not_started") === applicationStatusFilter;
+    const searchableText = [
+      job.title,
+      job.company,
+      job.location,
+      job.remoteType,
+      job.salaryText,
+      job.sourceQuality,
+      job.status,
+      job.userDecision,
+      job.applicationStatus,
+      job.nextAction
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
 
-    return matchesDecision && matchesApplicationStatus;
+    return matchesQueueFilter(job) && matchesDecision && matchesApplicationStatus && matchesSearch;
   });
 
   return (
@@ -813,12 +909,14 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       loginForm={loginForm}
       onLogin={handleLogin}
       onLogout={() => void handleLogout()}
-      setActiveView={setActiveView}
+      setActiveView={navigateToView}
       setLoginForm={setLoginForm}
       status={status}
       user={user}
     >
-      {activeView === "profile" ? (
+      {activeView === "dashboard" ? (
+        <DashboardPanel jobs={jobs} onOpenJobsFilter={openJobsWithFilter} />
+      ) : activeView === "profile" ? (
         <CandidateProfilePanel
           activeCv={activeCv}
           cvForm={cvForm}
@@ -834,7 +932,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           updateProfileField={updateProfileField}
           user={user}
         />
-      ) : activeView === "import" ? (
+      ) : activeView === "imports" ? (
         <ImportPanel
           extractedJobs={extractedJobs}
           gmailImportForm={gmailImportForm}
@@ -863,56 +961,96 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           user={user}
         />
       ) : (
-        <section className="profile-panel job-queue-page">
-          <div className="section-heading">
-            <h2>Job Queue</h2>
-            <button disabled={isBusy || !user} type="button" onClick={() => void loadJobs()}>
-              Refresh
-            </button>
-          </div>
-
-          <JobCreateForm
-            canCreate={Boolean(user)}
-            form={jobForm}
-            isBusy={isBusy}
-            onSubmit={handleJobCreate}
-            updateField={updateJobField}
-          />
-
-          <JobFilters
-            applicationStatusFilter={applicationStatusFilter}
-            setApplicationStatusFilter={setApplicationStatusFilter}
-            setUserDecisionFilter={setUserDecisionFilter}
-            userDecisionFilter={userDecisionFilter}
-          />
-
-          <div className="job-workspace">
-            <JobQueuePanel
-              isBusy={isBusy}
-              jobs={filteredJobs}
-              onArchiveJob={(id) => void handleArchiveJob(id)}
-              onOpenJob={openJob}
-              onRunReview={(id) => void handleReviewJob(id)}
-              selectedJobId={selectedJob?.id ?? null}
-              totalJobs={jobs.length}
-              user={user}
-            />
-
+        <section className="jobs-page">
+          {selectedJob ? (
             <JobDetailPanel
+              activeTab={jobDetailTab}
               enrichmentForm={enrichmentForm}
               isBusy={isBusy}
               job={selectedJob}
+              onBack={() => {
+                setSelectedJob(null);
+                setJobDetailTab("overview");
+              }}
               onArchiveJob={(id) => void handleArchiveJob(id)}
               onEnrichmentSave={handleEnrichmentSave}
               onPipelineSave={handlePipelineSave}
+              onPipelineQuickSave={() => void savePipeline()}
               onRunReview={(id) => void handleReviewJob(id)}
               onSaveAndReview={() => void saveJobEnrichment(true)}
+              onTabChange={setJobDetailTab}
               pipelineForm={pipelineForm}
               updateEnrichmentField={updateEnrichmentField}
               updatePipelineField={updatePipelineField}
               user={user}
             />
-          </div>
+          ) : (
+            <>
+              <div className="page-title-row">
+                <div>
+                  <h2>Jobs</h2>
+                  <p className="muted">Scan active jobs and open only the ones you want to work on.</p>
+                </div>
+                <div className="button-row">
+                  <button
+                    className="button-secondary"
+                    disabled={isBusy || !user}
+                    type="button"
+                    onClick={() => {
+                      setSelectedJob(null);
+                      setShowNewJobForm(true);
+                    }}
+                  >
+                    New job
+                  </button>
+                  <button disabled={isBusy || !user} type="button" onClick={() => void loadJobs()}>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {showNewJobForm ? (
+                <JobCreateForm
+                  canCreate={Boolean(user)}
+                  form={jobForm}
+                  isBusy={isBusy}
+                  onCancel={() => setShowNewJobForm(false)}
+                  onSubmit={handleJobCreate}
+                  updateField={updateJobField}
+                />
+              ) : null}
+
+              {queueFilter !== "all" ? (
+                <div className="active-filter-banner">
+                  <span>Showing: {queueFilterLabels[queueFilter]}</span>
+                  <button className="button-secondary button-small" type="button" onClick={() => setQueueFilter("all")}>
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+
+              <JobFilters
+                applicationStatusFilter={applicationStatusFilter}
+                searchQuery={jobSearchQuery}
+                setApplicationStatusFilter={setApplicationStatusFilter}
+                setSearchQuery={setJobSearchQuery}
+                setUserDecisionFilter={setUserDecisionFilter}
+                userDecisionFilter={userDecisionFilter}
+              />
+
+              <JobQueuePanel
+                isBusy={isBusy}
+                jobs={filteredJobs}
+                onArchiveJob={(id) => void handleArchiveJob(id)}
+                onEnrichJob={(job) => openJob(job, "enrichment")}
+                onOpenJob={(job) => openJob(job)}
+                onRunReview={(id) => void handleReviewJob(id)}
+                selectedJobId={null}
+                totalJobs={jobs.length}
+                user={user}
+              />
+            </>
+          )}
         </section>
       )}
     </AppShell>

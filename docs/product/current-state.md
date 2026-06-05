@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 13 clean app shell and UX polish phase.
+This project is currently in the Milestone 14 product UX redesign phase.
 
 ## Existing prototype
 
@@ -98,8 +98,17 @@ Milestone 01 project skeleton has been created.
 - Pipeline updates are scoped to the authenticated user and validate allowed user decision/application status values.
 - `appliedAt` and `rejectedAt` are auto-set when application status becomes `applied` or `rejected`.
 - Failed AI calls are logged as failed `AutomationRun` rows and do not delete or hide saved jobs.
-- `apps/web` has a minimal demo-login candidate profile editor, combined import view, action-oriented job queue, focused job detail view, manual job enrichment form, AI review action, and application pipeline editor.
-- The web app primary navigation is now `Profile`, `Import`, and `Job Queue`.
+- `apps/web` has a minimal demo-login candidate profile editor, dashboard, combined imports view, scan-first jobs view, focused tabbed job detail view, manual job enrichment form, AI review action, and application pipeline editor.
+- The web app primary navigation is now `Dashboard`, `Jobs`, `Imports`, and `Profile`.
+- Milestone 14 adds a Dashboard as the default signed-in view. It summarizes jobs that need full descriptions, are ready for review, look like strong matches, need clarification, need pipeline follow-up, and the total active queue.
+- Dashboard summary cards navigate into the Jobs view with a matching queue filter so the user can act on one category at a time.
+- The Jobs view is now scan-first: filters/search, grouped queue sections, compact job rows, and row-level Open/Review/Enrich/Archive actions are shown without an inline detail editor.
+- Opening a job switches to a focused route-like Job Detail view with Overview, AI Review, Description, Pipeline, and Enrichment tabs.
+- Job Detail chooses a default tab based on the job state: AI Review when a review exists, Enrichment when the source is incomplete, and Overview otherwise.
+- Secondary forms are progressively disclosed. Manual job creation is behind a `New job` action, paste extraction is behind `Paste job text`, simulated imports are under `Developer / simulated import`, and Gmail controls only show workflow-relevant connected/disconnected actions.
+- The UX goal for Milestone 14 is lower cognitive load: queue pages support scanning and deciding what to open, while detail pages support working on one job at a time.
+- AI review presentation now starts with the short recommendation text before deeper fit breakdown, risk flags, CV angle, and clarification questions.
+- The app shell has a persistent signed-in navigation area, a top header with the account/sign-out controls, and a shared status/error area.
 - Milestone 13 cleaned the AppShell/auth experience: signed-out users see a focused login card, while signed-in users see a compact account area with sign-out in the header.
 - Global success and error messages now render in a consistent top alert area instead of appearing detached below the workspace.
 - The Job Queue groups active jobs by action state, including needs full description, ready for AI review, reviewed apply/strong matches, reviewed maybe/clarify, in pipeline, and other active jobs.

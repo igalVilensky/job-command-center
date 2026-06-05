@@ -3,7 +3,9 @@ import {
   type User,
   formatLocationRemote,
   formatSalary,
-  groupJobsByQueueState
+  getJobNextAction,
+  groupJobsByQueueState,
+  previewText
 } from "./types";
 
 type JobQueuePanelProps = {
@@ -14,6 +16,7 @@ type JobQueuePanelProps = {
   isBusy: boolean;
   onOpenJob: (job: Job) => void;
   onRunReview: (id: string) => void;
+  onEnrichJob: (job: Job) => void;
   onArchiveJob: (id: string) => void;
 };
 
@@ -24,6 +27,7 @@ function JobQueueCard({
   isBusy,
   onOpenJob,
   onRunReview,
+  onEnrichJob,
   onArchiveJob
 }: {
   job: Job;
@@ -32,9 +36,11 @@ function JobQueueCard({
   isBusy: boolean;
   onOpenJob: (job: Job) => void;
   onRunReview: (id: string) => void;
+  onEnrichJob: (job: Job) => void;
   onArchiveJob: (id: string) => void;
 }) {
   const review = job.latestAiReview;
+  const nextAction = getJobNextAction(job);
 
   return (
     <li>
@@ -46,10 +52,10 @@ function JobQueueCard({
           </div>
 
           <div className="job-row-meta">
-            <span>{formatSalary(job)}</span>
+            <span>Salary: {formatSalary(job)}</span>
             <span>{formatLocationRemote(job)}</span>
-            <span>{job.applicationStatus ?? "not_started"}</span>
-            <span>{job.userDecision ?? "undecided"}</span>
+            <span>Status: {job.status}</span>
+            <span>Pipeline: {job.applicationStatus ?? "not_started"}</span>
           </div>
 
           <span className="badge-row">
@@ -61,6 +67,8 @@ function JobQueueCard({
               <em className="badge-muted">No review</em>
             )}
             <em>{job.sourceQuality}</em>
+            <em className="badge-next">{nextAction}</em>
+            {job.nextAction ? <em>{previewText(job.nextAction, 48)}</em> : null}
           </span>
         </div>
 
@@ -75,6 +83,14 @@ function JobQueueCard({
             onClick={() => onRunReview(job.id)}
           >
             Review
+          </button>
+          <button
+            className="button-secondary button-small"
+            disabled={isBusy || !user}
+            type="button"
+            onClick={() => onEnrichJob(job)}
+          >
+            Enrich
           </button>
           <button
             className="button-danger button-small"
@@ -98,6 +114,7 @@ export function JobQueuePanel({
   isBusy,
   onOpenJob,
   onRunReview,
+  onEnrichJob,
   onArchiveJob
 }: JobQueuePanelProps) {
   const groups = groupJobsByQueueState(jobs);
@@ -136,6 +153,7 @@ export function JobQueuePanel({
                   job={job}
                   key={job.id}
                   onArchiveJob={onArchiveJob}
+                  onEnrichJob={onEnrichJob}
                   onOpenJob={onOpenJob}
                   onRunReview={onRunReview}
                   selected={job.id === selectedJobId}

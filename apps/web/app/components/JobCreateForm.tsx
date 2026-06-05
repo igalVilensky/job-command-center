@@ -7,13 +7,29 @@ type JobCreateFormProps = {
   isBusy: boolean;
   canCreate: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
   updateField: (field: keyof JobFormState, value: string) => void;
 };
 
-export function JobCreateForm({ form, isBusy, canCreate, onSubmit, updateField }: JobCreateFormProps) {
+export function JobCreateForm({
+  form,
+  isBusy,
+  canCreate,
+  onSubmit,
+  onCancel,
+  updateField
+}: JobCreateFormProps) {
   return (
-    <details className="manual-job-panel">
-      <summary>New manual job</summary>
+    <section className="manual-job-panel" aria-label="New job">
+      <div className="section-heading">
+        <div>
+          <h3>New job</h3>
+          <p className="muted">Create a job manually when it did not arrive from an import.</p>
+        </div>
+        <button className="button-secondary" type="button" onClick={onCancel}>
+          Close
+        </button>
+      </div>
 
       <form className="job-form manual-job-form" onSubmit={onSubmit}>
         <div className="form-grid">
@@ -87,6 +103,6 @@ export function JobCreateForm({ form, isBusy, canCreate, onSubmit, updateField }
           </button>
         </div>
       </form>
-    </details>
+    </section>
   );
 }

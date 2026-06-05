@@ -29,11 +29,15 @@ export function JobEnrichmentForm({
   const needsDescription = job.sourceQuality !== "full_description";
 
   return (
-    <details className="detail-section" open={needsDescription}>
-      <summary>
-        <span>Enrichment</span>
-        <small>{needsDescription ? "Full description needed" : "Full description saved"}</small>
-      </summary>
+    <section className="detail-section" aria-label="Enrichment">
+      <div className="section-heading">
+        <div>
+          <h4>Enrichment</h4>
+          <p className="muted">
+            {needsDescription ? "Full description needed" : "Full description saved"}
+          </p>
+        </div>
+      </div>
 
       {needsDescription ? (
         <p className="muted">
@@ -93,6 +97,6 @@ export function JobEnrichmentForm({
           </button>
         </div>
       </form>
-    </details>
+    </section>
   );
 }
