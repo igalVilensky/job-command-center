@@ -7,6 +7,15 @@ import {
   groupJobsByQueueState,
   previewText
 } from "./types";
+import {
+  BadgeRow,
+  formatStateLabel,
+  JobStatusBadge,
+  NextActionBadge,
+  ReviewDecisionBadge,
+  SourceQualityBadge,
+  StatusBadge
+} from "./StatusBadge";
 
 type JobQueuePanelProps = {
   jobs: Job[];
@@ -54,22 +63,19 @@ function JobQueueCard({
           <div className="job-row-meta">
             <span>Salary: {formatSalary(job)}</span>
             <span>{formatLocationRemote(job)}</span>
-            <span>Status: {job.status}</span>
-            <span>Pipeline: {job.applicationStatus ?? "not_started"}</span>
+            <span>Status: {formatStateLabel(job.status)}</span>
+            <span>Pipeline: {formatStateLabel(job.applicationStatus ?? "not_started")}</span>
           </div>
 
-          <span className="badge-row">
-            {review ? (
-              <em className="badge-accent">
-                {review.score} / {review.decision}
-              </em>
-            ) : (
-              <em className="badge-muted">No review</em>
-            )}
-            <em>{job.sourceQuality}</em>
-            <em className="badge-next">{nextAction}</em>
-            {job.nextAction ? <em>{previewText(job.nextAction, 48)}</em> : null}
-          </span>
+          <BadgeRow>
+            <ReviewDecisionBadge review={review} />
+            <SourceQualityBadge sourceQuality={job.sourceQuality} />
+            <JobStatusBadge status={job.status} />
+            <NextActionBadge nextAction={nextAction} />
+            {job.nextAction ? (
+              <StatusBadge label={previewText(job.nextAction, 48)} tone="muted" />
+            ) : null}
+          </BadgeRow>
         </div>
 
         <div className="job-row-actions">

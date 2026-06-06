@@ -241,6 +241,40 @@ const metadataLine = (label: string, value: string | null | undefined) => {
   return trimmed ? `${label}: ${trimmed}` : null;
 };
 
+const noisyGmailLabels = new Set([
+  "CATEGORY_FORUMS",
+  "CATEGORY_PERSONAL",
+  "CATEGORY_PROMOTIONS",
+  "CATEGORY_SOCIAL",
+  "CATEGORY_UPDATES",
+  "CHAT",
+  "DRAFT",
+  "IMPORTANT",
+  "INBOX",
+  "SENT",
+  "SPAM",
+  "STARRED",
+  "TRASH",
+  "UNREAD"
+]);
+
+const readableSourceLabel = (sourceLabel: string | null | undefined) => {
+  const readableLabels = (sourceLabel ?? "")
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean)
+    .filter((label) => !noisyGmailLabels.has(label) && !/^Label_\d+$/i.test(label))
+    .map((label) =>
+      label
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return readableLabels.length > 0 ? readableLabels.join(", ") : null;
+};
+
 const buildHeader = (email: ImportedEmailSourceInput) =>
   [
     "Imported email source",
@@ -249,7 +283,7 @@ const buildHeader = (email: ImportedEmailSourceInput) =>
     metadataLine("Provider", email.provider),
     metadataLine("Provider message ID", email.providerMessageId),
     metadataLine("Provider thread ID", email.providerThreadId),
-    metadataLine("Source label", email.sourceLabel),
+    metadataLine("Source label", readableSourceLabel(email.sourceLabel)),
     metadataLine("Snippet", email.snippet)
   ]
     .filter((line): line is string => Boolean(line))

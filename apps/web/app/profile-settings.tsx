@@ -228,6 +228,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gmail = params.get("gmail");
+    const reason = params.get("reason");
 
     if (!gmail) {
       return;
@@ -237,6 +238,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
     if (gmail === "connected") {
       setStatus("Gmail connected");
+      void loadGmailStatus();
+    } else if (reason === "missing_gmail_scope") {
+      setError("Gmail connection is missing read permission. Reconnect Gmail and approve Gmail read access.");
       void loadGmailStatus();
     } else {
       setError("Gmail connection failed");
@@ -548,6 +552,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       await Promise.all([loadImportedEmails(), loadGmailStatus()]);
       setStatus(`Gmail import complete: ${data.imported} new, ${data.duplicates} duplicate`);
     } catch (importError) {
+      await loadGmailStatus().catch(() => null);
       setError(importError instanceof Error ? importError.message : "Gmail import failed");
     } finally {
       setIsBusy(false);

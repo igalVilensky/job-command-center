@@ -17,6 +17,14 @@ import {
   jobNeedsReview,
   sourceNeedsFullDescription
 } from "./types";
+import {
+  BadgeRow,
+  formatStateLabel,
+  JobStatusBadge,
+  NextActionBadge,
+  ReviewDecisionBadge,
+  SourceQualityBadge
+} from "./StatusBadge";
 
 type JobDetailPanelProps = {
   job: Job | null;
@@ -133,18 +141,12 @@ export function JobDetailPanel({
             <p className="muted">{job.company}</p>
           </div>
 
-          <span className="badge-row">
-            {review ? (
-              <em className="badge-accent">
-                {review.score} / {review.decision}
-              </em>
-            ) : (
-              <em className="badge-muted">No review</em>
-            )}
-            <em>{job.status}</em>
-            <em>{job.sourceQuality}</em>
-            <em className="badge-next">{getJobNextAction(job)}</em>
-          </span>
+          <BadgeRow>
+            <ReviewDecisionBadge review={review} />
+            <JobStatusBadge status={job.status} />
+            <SourceQualityBadge sourceQuality={job.sourceQuality} />
+            <NextActionBadge nextAction={getJobNextAction(job)} />
+          </BadgeRow>
         </div>
 
         <div className="button-row job-summary-actions">
@@ -177,11 +179,11 @@ export function JobDetailPanel({
           </div>
           <div>
             <dt>Decision</dt>
-            <dd>{job.userDecision ?? "undecided"}</dd>
+            <dd>{formatStateLabel(job.userDecision ?? "undecided")}</dd>
           </div>
           <div>
             <dt>Pipeline</dt>
-            <dd>{job.applicationStatus ?? "not_started"}</dd>
+            <dd>{formatStateLabel(job.applicationStatus ?? "not_started")}</dd>
           </div>
           <div>
             <dt>URL</dt>
@@ -224,11 +226,19 @@ export function JobDetailPanel({
               <dl className="detail-list">
                 <div>
                   <dt>Status</dt>
-                  <dd>{job.status}</dd>
+                  <dd>
+                    <BadgeRow>
+                      <JobStatusBadge status={job.status} />
+                    </BadgeRow>
+                  </dd>
                 </div>
                 <div>
                   <dt>Source quality</dt>
-                  <dd>{job.sourceQuality}</dd>
+                  <dd>
+                    <BadgeRow>
+                      <SourceQualityBadge sourceQuality={job.sourceQuality} />
+                    </BadgeRow>
+                  </dd>
                 </div>
                 <div>
                   <dt>Remote</dt>

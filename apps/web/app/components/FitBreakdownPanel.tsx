@@ -1,4 +1,5 @@
 import { type FitBreakdown, fitBreakdownRows } from "./types";
+import { FitVerdictBadge } from "./StatusBadge";
 
 type FitBreakdownPanelProps = {
   breakdown: FitBreakdown | null | undefined;
@@ -22,7 +23,7 @@ export function FitBreakdownPanel({ breakdown }: FitBreakdownPanelProps) {
           <div className="fit-breakdown-card" key={key}>
             <div className="fit-breakdown-heading">
               <strong>{label}</strong>
-              <span className={`fit-verdict ${item.verdict}`}>{item.verdict}</span>
+              <FitVerdictBadge verdict={item.verdict} />
             </div>
             <div className="fit-breakdown-score">{item.score}</div>
             <p>{item.notes}</p>

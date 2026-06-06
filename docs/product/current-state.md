@@ -1,6 +1,6 @@
 # Current State
 
-This project is currently in the Milestone 14 product UX redesign phase.
+This project is currently in the Milestone 15 visual design and status clarity phase.
 
 ## Existing prototype
 
@@ -146,6 +146,12 @@ Milestone 01 project skeleton has been created.
 - Manual Gmail import uses stored Gmail OAuth credentials to fetch recent messages, deduplicates them into `ImportedEmail`, and does not automatically extract jobs.
 - The `Imports` view includes Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, import history, and explicit email extraction.
 - Gmail connection state is clearer in the web app: disconnected users see a single connect action and helper text, while connected users see account details, last import, a disconnect action, and the Gmail import form.
+- Milestone 15 adds a calmer frontend visual design system with warmer neutral backgrounds, softer surfaces, softer borders, rounded controls, and quieter destructive actions.
+- Status display now uses semantic badge tones for neutral, info, success, warning, danger, accent, and muted states instead of same-looking grey tags.
+- Import, extraction, source quality, job status, next action, AI decision, and fit verdict states now map consistently to meaningful status colors.
+- Imported email rows are more scannable: each row shows a status rail based on extraction state, subject-first hierarchy, sender/date metadata, muted preview text, a prominent extraction pill, and clear Extract/Re-run/Retry plus View details actions.
+- Created/imported job lists now use the same compact job row style as the Job Queue, with title, company, source-quality badge, job-status badge, next-action badge, and an Open job action.
+- Red is reserved for failed/destructive states, while success no longer acts as the whole-app accent.
 
 Not implemented yet:
 

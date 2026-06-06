@@ -48,7 +48,7 @@ export function AppShell({
       <main className="page-shell signed-out-shell" data-api-url={apiUrl}>
         <header className="signed-out-header">
           <div className="brand-block">
-            <p className="eyebrow">Milestone 14</p>
+            <p className="eyebrow">Milestone 15</p>
             <h1>Job Command Center</h1>
             <p className="api-pill">API: {apiUrl}</p>
           </div>
@@ -108,7 +108,7 @@ export function AppShell({
     <main className="page-shell signed-in-shell" data-api-url={apiUrl}>
       <aside className="app-sidebar" aria-label="Primary">
         <div className="sidebar-brand">
-          <p className="eyebrow">Milestone 14</p>
+          <p className="eyebrow">Milestone 15</p>
           <strong>JCC</strong>
         </div>
 

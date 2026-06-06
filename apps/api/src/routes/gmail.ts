@@ -7,8 +7,10 @@ import {
   exchangeGoogleCode,
   fetchGoogleUserInfo,
   getGmailMessage,
+  GoogleApiError,
   GMAIL_OAUTH_SCOPES,
   GMAIL_PROVIDER,
+  GMAIL_READONLY_SCOPE,
   gmailMessageToImportedEmail,
   googleOauthConfigured,
   listGmailMessages,
@@ -103,11 +105,16 @@ const assertGmailConfigured = () => {
   }
 };
 
+const tokenScopes = (scopes: string[]) => (scopes.length > 0 ? scopes : GMAIL_OAUTH_SCOPES);
+
+const hasGmailReadScope = (scopes: string[]) => tokenScopes(scopes).includes(GMAIL_READONLY_SCOPE);
+
 const safeEmailAccount = (account: EmailAccount | null) => ({
   connected:
     Boolean(account) &&
     account?.status === "connected" &&
-    Boolean(account.accessTokenEncrypted || account.refreshTokenEncrypted),
+    Boolean(account.accessTokenEncrypted || account.refreshTokenEncrypted) &&
+    hasGmailReadScope(account.scopes),
   emailAddress: account?.emailAddress ?? null,
   displayName: account?.displayName ?? null,
   status: account?.status ?? "disconnected",
@@ -141,6 +148,13 @@ const findConnectedGmailAccount = async (userId: string) => {
     throw new HttpError(400, "Gmail is not connected");
   }
 
+  if (!hasGmailReadScope(account.scopes)) {
+    throw new HttpError(
+      400,
+      "Gmail connection is missing read permission. Reconnect Gmail and approve Gmail read access."
+    );
+  }
+
   return account;
 };
 
@@ -172,7 +186,7 @@ const storeGmailAccount = async (input: {
     accessTokenEncrypted: encryptToken(input.accessToken),
     refreshTokenEncrypted: encryptedRefreshToken,
     tokenExpiresAt: input.tokenExpiresAt,
-    scopes: input.scopes.length > 0 ? input.scopes : GMAIL_OAUTH_SCOPES,
+    scopes: tokenScopes(input.scopes),
     status: "connected"
   };
 
@@ -192,6 +206,27 @@ const storeGmailAccount = async (input: {
   });
 };
 
+const disconnectGmailAccount = (accountId: string) =>
+  prisma.emailAccount.update({
+    where: { id: accountId },
+    data: {
+      status: "disconnected",
+      accessTokenEncrypted: null,
+      refreshTokenEncrypted: null,
+      tokenExpiresAt: null
+    }
+  });
+
+const isRevokedGoogleTokenError = (error: unknown) =>
+  error instanceof GoogleApiError &&
+  error.statusCode === 400 &&
+  /expired|revoked|invalid_grant/i.test(error.detail);
+
+const isInsufficientScopeError = (error: unknown) =>
+  error instanceof GoogleApiError &&
+  error.statusCode === 403 &&
+  /insufficient|scope|permission/i.test(error.detail);
+
 const gmailAccessToken = async (account: EmailAccount) => {
   const shouldRefresh =
     !account.accessTokenEncrypted ||
@@ -209,7 +244,19 @@ const gmailAccessToken = async (account: EmailAccount) => {
   }
 
   const refreshToken = decryptToken(account.refreshTokenEncrypted);
-  const refreshed = await refreshGoogleAccessToken(refreshToken);
+  let refreshed;
+
+  try {
+    refreshed = await refreshGoogleAccessToken(refreshToken);
+  } catch (error) {
+    if (isRevokedGoogleTokenError(error)) {
+      await disconnectGmailAccount(account.id);
+      throw new HttpError(400, "Gmail authorization expired or was revoked. Reconnect Gmail.");
+    }
+
+    throw error;
+  }
+
   const updated = await prisma.emailAccount.update({
     where: { id: account.id },
     data: {
@@ -335,6 +382,13 @@ gmailRouter.get(
       assertGmailConfigured();
 
       const tokens = await exchangeGoogleCode(code);
+      const scopes = tokenScopes(tokens.scope);
+
+      if (!hasGmailReadScope(scopes)) {
+        res.redirect(302, redirectToWeb("error", "missing_gmail_scope"));
+        return;
+      }
+
       const userInfo = await fetchGoogleUserInfo(tokens.accessToken);
 
       await storeGmailAccount({
@@ -344,7 +398,7 @@ gmailRouter.get(
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         tokenExpiresAt: tokenExpiresAt(tokens.expiresIn),
-        scopes: tokens.scope
+        scopes
       });
 
       res.redirect(302, redirectToWeb("connected"));
@@ -387,23 +441,36 @@ gmailRouter.post(
     assertGmailConfigured();
 
     const { account, accessToken } = await gmailAccessToken(connectedAccount);
-    const messageSummaries = await listGmailMessages(accessToken, input.query, input.maxResults);
     const emails = [];
     let imported = 0;
     let duplicates = 0;
 
-    for (const summary of messageSummaries) {
-      const gmailMessage = await getGmailMessage(accessToken, summary.id);
-      const importedMessage = gmailMessageToImportedEmail(gmailMessage);
-      const result = await createImportedEmailFromGmail(userId, importedMessage);
+    try {
+      const messageSummaries = await listGmailMessages(accessToken, input.query, input.maxResults);
 
-      if (result.duplicate) {
-        duplicates += 1;
-      } else {
-        imported += 1;
+      for (const summary of messageSummaries) {
+        const gmailMessage = await getGmailMessage(accessToken, summary.id);
+        const importedMessage = gmailMessageToImportedEmail(gmailMessage);
+        const result = await createImportedEmailFromGmail(userId, importedMessage);
+
+        if (result.duplicate) {
+          duplicates += 1;
+        } else {
+          imported += 1;
+        }
+
+        emails.push(serializeImportedEmail(result.email));
+      }
+    } catch (error) {
+      if (isInsufficientScopeError(error)) {
+        await disconnectGmailAccount(account.id);
+        throw new HttpError(
+          400,
+          "Gmail connection is missing read permission. Reconnect Gmail and approve Gmail read access."
+        );
       }
 
-      emails.push(serializeImportedEmail(result.email));
+      throw error;
     }
 
     await prisma.emailAccount.update({

@@ -9,12 +9,19 @@ import {
   type ImportedEmailFormState,
   type Job,
   type User,
-  extractedJobsStatus,
   formatDate,
   previewText,
   selectedEmailEmptyJobsMessage,
   selectedEmailJobCountText
 } from "./types";
+import { JobSummaryRow } from "./JobSummaryRow";
+import {
+  BadgeRow,
+  ExtractionStatusBadge,
+  ImportStatusBadge,
+  StatusBadge,
+  getExtractionStatusTone
+} from "./StatusBadge";
 
 type ImportPanelProps = {
   importForm: ImportFormState;
@@ -42,6 +49,58 @@ type ImportPanelProps = {
   updateImportField: (field: keyof ImportFormState, value: string) => void;
   updateImportedEmailField: (field: keyof ImportedEmailFormState, value: string) => void;
   updateGmailImportField: (field: keyof GmailImportFormState, value: string) => void;
+};
+
+const importedEmailSender = (email: ImportedEmail) =>
+  email.fromName || email.fromEmail || email.providerMessageId;
+
+const importedEmailPreview = (email: ImportedEmail) =>
+  email.snippet || previewText(email.bodyText ?? "") || "No preview saved.";
+
+const importedEmailActionLabel = (email: ImportedEmail) => {
+  if (email.extractionStatus === "succeeded") {
+    return "Re-run extraction";
+  }
+
+  if (email.extractionStatus === "failed") {
+    return "Retry extraction";
+  }
+
+  return "Extract jobs";
+};
+
+const noisyGmailLabels = new Set([
+  "CATEGORY_FORUMS",
+  "CATEGORY_PERSONAL",
+  "CATEGORY_PROMOTIONS",
+  "CATEGORY_SOCIAL",
+  "CATEGORY_UPDATES",
+  "CHAT",
+  "DRAFT",
+  "IMPORTANT",
+  "INBOX",
+  "SENT",
+  "SPAM",
+  "STARRED",
+  "TRASH",
+  "UNREAD"
+]);
+
+const readableSourceLabel = (sourceLabel: string | null) => {
+  const readableLabels = (sourceLabel ?? "")
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean)
+    .filter((label) => !noisyGmailLabels.has(label) && !/^Label_\d+$/i.test(label))
+    .map((label) =>
+      label
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return readableLabels.length > 0 ? readableLabels.join(", ") : null;
 };
 
 export function ImportPanel({
@@ -140,21 +199,15 @@ export function ImportPanel({
       <div className="description-block">
         <h3>Created Jobs</h3>
         {extractedJobs.length === 0 ? <p className="muted">No imported jobs yet.</p> : null}
-        <ul className="job-list">
+        <ul className="queue-list">
           {extractedJobs.map((job) => (
-            <li key={job.id}>
-              <button type="button" onClick={() => onOpenJob(job)}>
-                <span>
-                  <strong>{job.title}</strong>
-                  <small>{job.company}</small>
-                </span>
-                <span className="badge-row">
-                  <em>{job.status}</em>
-                  <em>{job.sourceQuality}</em>
-                  <em>{job.applicationStatus ?? "not_started"}</em>
-                </span>
-              </button>
-            </li>
+            <JobSummaryRow
+              actionLabel="Open job"
+              job={job}
+              key={job.id}
+              onOpenJob={onOpenJob}
+              showMeta={false}
+            />
           ))}
         </ul>
       </div>
@@ -162,11 +215,9 @@ export function ImportPanel({
       <section className="description-block">
         <div className="section-heading">
           <h3>Gmail</h3>
-          <span className="badge-row" aria-label={`Gmail ${gmailStatusLabel}`}>
-            <em className={gmailConnected ? "badge-success" : "badge-muted"}>
-              {gmailStatusLabel}
-            </em>
-          </span>
+          <BadgeRow label={`Gmail ${gmailStatusLabel}`}>
+            <StatusBadge label={gmailStatusLabel} tone={gmailConnected ? "success" : "muted"} />
+          </BadgeRow>
         </div>
 
         {gmailConnected ? (
@@ -353,28 +404,62 @@ export function ImportPanel({
         <section>
           <h3>Import History</h3>
           {importedEmails.length === 0 ? <p className="muted">No imported emails yet.</p> : null}
-          <ul className="job-list">
-            {importedEmails.map((email) => (
-              <li key={email.id}>
-                <button type="button" onClick={() => onSelectImportedEmail(email)}>
-                  <span>
-                    <strong>{email.subject}</strong>
-                    <small>
-                      Email from {email.fromName || email.fromEmail || email.providerMessageId}
-                    </small>
-                    <small>
-                      Preview: {email.snippet || previewText(email.bodyText ?? "") || "No preview saved."}
-                    </small>
-                  </span>
-                  <span className="badge-row">
-                    <em>Import: {email.importStatus}</em>
-                    <em>Extraction: {email.extractionStatus}</em>
-                    <em>{extractedJobsStatus(email)}</em>
-                    {email.extractionStatus === "succeeded" ? <em>Processed</em> : null}
-                  </span>
-                </button>
-              </li>
-            ))}
+          <ul className="email-list">
+            {importedEmails.map((email) => {
+              const selected = selectedImportedEmail?.id === email.id;
+              const tone = getExtractionStatusTone(email.extractionStatus);
+              const canExtract = Boolean(user && email.bodyText?.trim());
+              const sourceLabel = readableSourceLabel(email.sourceLabel);
+
+              return (
+                <li key={email.id}>
+                  <article
+                    className={`email-import-card email-tone-${tone}${selected ? " selected" : ""}`}
+                  >
+                    <span className="email-status-rail" aria-hidden="true" />
+
+                    <div className="email-import-main">
+                      <div className="email-import-title-row">
+                        <div>
+                          <strong>{email.subject || "No subject"}</strong>
+                          <small>
+                            {importedEmailSender(email)} · {formatDate(email.receivedAt)}
+                          </small>
+                        </div>
+                        <ExtractionStatusBadge email={email} />
+                      </div>
+
+                      <p className="email-preview">{importedEmailPreview(email)}</p>
+
+                      <BadgeRow className="email-badges">
+                        <ImportStatusBadge status={email.importStatus} />
+                        {sourceLabel ? (
+                          <StatusBadge label={sourceLabel} tone="muted" />
+                        ) : null}
+                      </BadgeRow>
+                    </div>
+
+                    <div className="email-import-actions">
+                      <button
+                        className="button-primary button-small"
+                        disabled={isBusy || !canExtract}
+                        type="button"
+                        onClick={() => onExtractImportedEmail(email.id)}
+                      >
+                        {importedEmailActionLabel(email)}
+                      </button>
+                      <button
+                        className="button-secondary button-small"
+                        type="button"
+                        onClick={() => onSelectImportedEmail(email)}
+                      >
+                        {selected ? "Selected" : "View details"}
+                      </button>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
@@ -383,7 +468,7 @@ export function ImportPanel({
             <details className="email-detail" open>
               <summary>
                 <span>Selected email</span>
-                <small>{selectedImportedEmail.extractionStatus}</small>
+                <ExtractionStatusBadge email={selectedImportedEmail} />
               </summary>
 
               <div className="section-heading">
@@ -400,9 +485,7 @@ export function ImportPanel({
                   type="button"
                   onClick={() => onExtractImportedEmail(selectedImportedEmail.id)}
                 >
-                  {selectedImportedEmail.extractionStatus === "succeeded"
-                    ? "Re-run extraction"
-                    : "Extract jobs from email"}
+                  {importedEmailActionLabel(selectedImportedEmail)}
                 </button>
               </div>
               {selectedImportedEmail.extractionStatus === "succeeded" ? (
@@ -428,15 +511,23 @@ export function ImportPanel({
                 </div>
                 <div>
                   <dt>Label</dt>
-                  <dd>{selectedImportedEmail.sourceLabel ?? "Not set"}</dd>
+                  <dd>{readableSourceLabel(selectedImportedEmail.sourceLabel) ?? "Not set"}</dd>
                 </div>
                 <div>
                   <dt>Import</dt>
-                  <dd>{selectedImportedEmail.importStatus}</dd>
+                  <dd>
+                    <BadgeRow>
+                      <ImportStatusBadge status={selectedImportedEmail.importStatus} />
+                    </BadgeRow>
+                  </dd>
                 </div>
                 <div>
                   <dt>Extraction</dt>
-                  <dd>{selectedImportedEmail.extractionStatus}</dd>
+                  <dd>
+                    <BadgeRow>
+                      <ExtractionStatusBadge email={selectedImportedEmail} />
+                    </BadgeRow>
+                  </dd>
                 </div>
                 <div>
                   <dt>Extracted jobs</dt>
@@ -476,20 +567,15 @@ export function ImportPanel({
                 {importedEmailExtractedJobs.length === 0 ? (
                   <p className="muted">{selectedEmailEmptyJobsMessage(selectedImportedEmail)}</p>
                 ) : null}
-                <ul className="job-list">
+                <ul className="queue-list">
                   {importedEmailExtractedJobs.map((job) => (
-                    <li key={job.id}>
-                      <button type="button" onClick={() => onOpenJob(job)}>
-                        <span>
-                          <strong>{job.title}</strong>
-                          <small>{job.company}</small>
-                        </span>
-                        <span className="badge-row">
-                          <em>{job.status}</em>
-                          <em>{job.sourceQuality}</em>
-                        </span>
-                      </button>
-                    </li>
+                    <JobSummaryRow
+                      actionLabel="Open job"
+                      job={job}
+                      key={job.id}
+                      onOpenJob={onOpenJob}
+                      showMeta={false}
+                    />
                   ))}
                 </ul>
               </div>

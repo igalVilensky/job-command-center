@@ -1,5 +1,6 @@
 import { type Job, type User, previewText } from "./types";
 import { FitBreakdownPanel } from "./FitBreakdownPanel";
+import { BadgeRow, ReviewDecisionBadge } from "./StatusBadge";
 
 type AiReviewPanelProps = {
   job: Job;
@@ -33,7 +34,11 @@ export function AiReviewPanel({ job, user, isBusy, onRunReview }: AiReviewPanelP
             </div>
             <div>
               <dt>Decision</dt>
-              <dd>{review.decision}</dd>
+              <dd>
+                <BadgeRow>
+                  <ReviewDecisionBadge review={review} />
+                </BadgeRow>
+              </dd>
             </div>
           </dl>
           <p className="review-short">{previewText(review.reviewText, 320)}</p>

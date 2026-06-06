@@ -19,6 +19,7 @@ type DashboardCard = {
   label: string;
   value: number;
   helper: string;
+  tone: "warning" | "accent" | "success" | "info" | "neutral";
 };
 
 export function DashboardPanel({ jobs, onOpenJobsFilter }: DashboardPanelProps) {
@@ -33,37 +34,43 @@ export function DashboardPanel({ jobs, onOpenJobsFilter }: DashboardPanelProps) 
       filter: "needs_description",
       label: queueFilterLabels.needs_description,
       value: needsDescription,
-      helper: "Paste full descriptions before trusting review output."
+      helper: "Paste full descriptions before trusting review output.",
+      tone: "warning"
     },
     {
       filter: "ready_for_review",
       label: queueFilterLabels.ready_for_review,
       value: readyForReview,
-      helper: "Jobs with enough detail for AI scoring."
+      helper: "Jobs with enough detail for AI scoring.",
+      tone: "accent"
     },
     {
       filter: "apply",
       label: queueFilterLabels.apply,
       value: strongMatches,
-      helper: "Reviewed jobs worth a decision."
+      helper: "Reviewed jobs worth a decision.",
+      tone: "success"
     },
     {
       filter: "maybe",
       label: queueFilterLabels.maybe,
       value: maybeClarify,
-      helper: "Jobs with caveats or open questions."
+      helper: "Jobs with caveats or open questions.",
+      tone: "info"
     },
     {
       filter: "follow_up",
       label: queueFilterLabels.follow_up,
       value: followUps,
-      helper: "Pipeline items with next actions or dates."
+      helper: "Pipeline items with next actions or dates.",
+      tone: "accent"
     },
     {
       filter: "all",
       label: "Total active jobs",
       value: jobs.length,
-      helper: "Everything currently unarchived."
+      helper: "Everything currently unarchived.",
+      tone: "neutral"
     }
   ];
 
@@ -86,7 +93,7 @@ export function DashboardPanel({ jobs, onOpenJobsFilter }: DashboardPanelProps) 
       <div className="dashboard-grid">
         {cards.map((card) => (
           <button
-            className="dashboard-card"
+            className={`dashboard-card card-${card.tone}`}
             key={card.filter}
             type="button"
             onClick={() => onOpenJobsFilter(card.filter)}

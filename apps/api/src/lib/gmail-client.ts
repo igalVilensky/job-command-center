@@ -7,8 +7,9 @@ const GMAIL_MESSAGES_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messa
 const BODY_TEXT_LIMIT = 100_000;
 
 export const GMAIL_PROVIDER = "gmail";
+export const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const GMAIL_OAUTH_SCOPES = [
-  "https://www.googleapis.com/auth/gmail.readonly",
+  GMAIL_READONLY_SCOPE,
   "openid",
   "email",
   "profile"
@@ -39,6 +40,17 @@ export type GmailImportedMessage = {
   rawMetadataJson: Record<string, unknown>;
 };
 
+export class GoogleApiError extends Error {
+  statusCode: number;
+  detail: string;
+
+  constructor(label: string, statusCode: number, detail: string) {
+    super(`${label} failed: status=${statusCode} detail=${detail}`);
+    this.statusCode = statusCode;
+    this.detail = detail;
+  }
+}
+
 type GmailMessageSummary = {
   id: string;
   threadId?: string;
@@ -54,6 +66,23 @@ type GmailMessage = {
   payload?: Record<string, unknown>;
   sizeEstimate?: number;
 };
+
+const noisyGmailLabelIds = new Set([
+  "CATEGORY_FORUMS",
+  "CATEGORY_PERSONAL",
+  "CATEGORY_PROMOTIONS",
+  "CATEGORY_SOCIAL",
+  "CATEGORY_UPDATES",
+  "CHAT",
+  "DRAFT",
+  "IMPORTANT",
+  "INBOX",
+  "SENT",
+  "SPAM",
+  "STARRED",
+  "TRASH",
+  "UNREAD"
+]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -108,7 +137,7 @@ const fetchJson = async (url: string, init: RequestInit, label: string) => {
   const { payload, text } = await responsePayload(response);
 
   if (!response.ok) {
-    throw new Error(`${label} failed: status=${response.status} detail=${safeFailureDetail(payload, text)}`);
+    throw new GoogleApiError(label, response.status, safeFailureDetail(payload, text));
   }
 
   return payload;
@@ -435,6 +464,27 @@ const truncateBodyText = (bodyText: string | null) => {
   return bodyText.length > BODY_TEXT_LIMIT ? bodyText.slice(0, BODY_TEXT_LIMIT) : bodyText;
 };
 
+const readableGmailLabel = (labelId: string) => {
+  const trimmed = labelId.trim();
+
+  if (!trimmed || noisyGmailLabelIds.has(trimmed) || /^Label_\d+$/i.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const sourceLabelFromGmailLabels = (labelIds: string[] | undefined) => {
+  const readableLabels = (labelIds ?? [])
+    .map(readableGmailLabel)
+    .filter((label): label is string => Boolean(label));
+
+  return readableLabels.length > 0 ? readableLabels.join(", ") : null;
+};
+
 const metadataPart = (part: Record<string, unknown> | undefined): Record<string, unknown> | null => {
   if (!part) {
     return null;
@@ -474,7 +524,7 @@ export const gmailMessageToImportedEmail = (message: GmailMessage): GmailImporte
     fromName: from.fromName,
     subject: headerValue(headers, "subject") || "(no subject)",
     receivedAt: receivedDate(message, headers),
-    sourceLabel: message.labelIds?.join(",") || null,
+    sourceLabel: sourceLabelFromGmailLabels(message.labelIds),
     snippet: message.snippet ?? null,
     bodyText: body,
     rawMetadataJson: {
