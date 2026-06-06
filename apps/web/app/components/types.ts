@@ -228,7 +228,13 @@ export type QueueFilter =
 
 export type QuickJobDecision = "interested" | "maybe" | "not_interested";
 
-export type JobDetailTab = "overview" | "review" | "description" | "pipeline" | "enrichment";
+export type JobDetailTab =
+  | "overview"
+  | "review"
+  | "applicationPrep"
+  | "description"
+  | "pipeline"
+  | "enrichment";
 
 export type JobActionPlanPrimaryKind =
   | "enrich"
@@ -251,6 +257,33 @@ export type JobActionPlan = {
   }[];
   blockers: string[];
   nextQuestions: string[];
+};
+
+export type ApplicationPrepStrengthCard = {
+  key: string;
+  label: string;
+  summary: string;
+  detail: string | null;
+  chips: string[];
+  tone: "success" | "info" | "warning" | "neutral";
+};
+
+export type ApplicationPrep = {
+  readiness: {
+    label: "Ready" | "Needs info" | "Not ready";
+    tone: "success" | "warning" | "danger" | "neutral";
+    reason: string;
+  };
+  positioning: string;
+  skillChips: string[];
+  strengthCards: ApplicationPrepStrengthCard[];
+  skillsToEmphasize: string[];
+  concernsToAddress: string[];
+  questionsToClarify: string[];
+  checklist: {
+    label: string;
+    status: "done" | "todo" | "warning";
+  }[];
 };
 
 export type QueueGroup = {
@@ -649,6 +682,478 @@ const weakFitBreakdownNotes = (job: Job) => {
       return `${label}: ${item.notes}`;
     })
     .filter((item): item is string => Boolean(item));
+};
+
+const uniqueList = (items: string[]) =>
+  Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+
+const prepKeywordSpecs = [
+  { label: "TypeScript", pattern: /\btypescript\b/i },
+  { label: "JavaScript", pattern: /\bjavascript\b/i },
+  { label: "React", pattern: /\breact\b/i },
+  { label: "Next", pattern: /\bnext(?:\.js|js)\b/i },
+  { label: "Vue", pattern: /\bvue\b/i },
+  { label: "Nuxt", pattern: /\bnuxt\b/i },
+  { label: "Node", pattern: /\bnode(?:\.js|js)?\b/i },
+  { label: "Express", pattern: /\bexpress(?:\.js|js)?\b/i },
+  { label: "Python", pattern: /\bpython\b/i },
+  { label: "FastAPI", pattern: /\bfastapi\b/i },
+  { label: "HTML5", pattern: /\bhtml5?\b/i },
+  { label: "CSS", pattern: /\bcss3?\b/i },
+  { label: "REST", pattern: /\brest(?:ful)?\b/i },
+  { label: "API", pattern: /\bapis?\b/i },
+  { label: "Docker", pattern: /\bdocker\b/i },
+  { label: "Git", pattern: /\bgit\b/i },
+  { label: "AWS", pattern: /\baws\b/i },
+  { label: "Firebase", pattern: /\bfirebase\b/i },
+  { label: "SQL", pattern: /\bsql\b/i },
+  { label: "NoSQL", pattern: /\bnosql\b/i },
+  { label: "Frontend", pattern: /\bfront[- ]?end\b/i },
+  { label: "Backend", pattern: /\bback[- ]?end\b/i },
+  { label: "Full-stack", pattern: /\bfull[- ]?stack\b/i },
+  { label: "Remote", pattern: /\b(?:full[- ]?)?remote\b/i },
+  { label: "Hybrid", pattern: /\bhybrid\b/i },
+  { label: "German", pattern: /\b(?:german|deutsch)\b/i },
+  { label: "English", pattern: /\b(?:english|englisch)\b/i }
+];
+
+export const applicationPrepKeywordLabels = prepKeywordSpecs.map((keyword) => keyword.label);
+
+export const extractApplicationPrepKeywords = (values: Array<string | null | undefined>) => {
+  const text = values.filter(Boolean).join("\n");
+
+  if (!text.trim()) {
+    return [];
+  }
+
+  return prepKeywordSpecs
+    .filter((keyword) => keyword.pattern.test(text))
+    .map((keyword) => keyword.label);
+};
+
+const fitStrengthNotes = (job: Job) => {
+  const breakdown = job.latestAiReview?.fitBreakdownJson;
+
+  if (!breakdown) {
+    return [];
+  }
+
+  return fitBreakdownRows
+    .map(({ key, label }) => {
+      const item = breakdown[key];
+
+      if (!item || (item.verdict !== "strong" && item.score < 75)) {
+        return null;
+      }
+
+      return `${label}: ${item.notes}`;
+    })
+    .filter((item): item is string => Boolean(item));
+};
+
+const prepStrengthLabel = (key: keyof FitBreakdown) => {
+  if (key === "locationRemote") {
+    return "Remote";
+  }
+
+  if (key === "sourceQuality") {
+    return "Source quality";
+  }
+
+  return fitBreakdownRows.find((row) => row.key === key)?.label ?? String(key);
+};
+
+const prepStrengthSummary = (key: keyof FitBreakdown, item: FitBreakdownItem, job: Job) => {
+  const notes = item.notes.toLowerCase();
+
+  if (key === "skills") {
+    if (/\bfront[- ]?end\b/.test(notes)) {
+      return "Frontend technologies match";
+    }
+
+    if (/\bfull[- ]?stack\b/.test(notes)) {
+      return "Full-stack experience lines up";
+    }
+
+    if (/\bback[- ]?end\b/.test(notes)) {
+      return "Backend requirements match";
+    }
+
+    return "Core skill overlap looks strong";
+  }
+
+  if (key === "locationRemote") {
+    if (/\bremote\b/.test(notes) || job.remoteType.includes("remote")) {
+      return "Remote setup looks compatible";
+    }
+
+    if (/\bhybrid\b/.test(notes) || job.remoteType === "hybrid") {
+      return "Hybrid setup looks workable";
+    }
+
+    return "Location expectations look workable";
+  }
+
+  if (key === "language") {
+    const languageChips = extractApplicationPrepKeywords([item.notes]).filter((chip) =>
+      ["German", "English"].includes(chip)
+    );
+
+    if (languageChips.length > 0) {
+      return `${languageChips.join(" / ")} requirements look acceptable`;
+    }
+
+    return "Language requirements look acceptable";
+  }
+
+  if (key === "sourceQuality") {
+    return job.sourceQuality === "full_description"
+      ? "Full description available"
+      : "Source is usable for prep";
+  }
+
+  if (key === "salary") {
+    return "Salary range looks compatible";
+  }
+
+  if (key === "seniority") {
+    return "Seniority level looks aligned";
+  }
+
+  return item.verdict === "strong" ? "Strong fit signal" : "Useful fit signal";
+};
+
+const fitStrengthCards = (job: Job): ApplicationPrepStrengthCard[] => {
+  const breakdown = job.latestAiReview?.fitBreakdownJson;
+
+  if (!breakdown) {
+    return [];
+  }
+
+  return fitBreakdownRows
+    .map(({ key }): ApplicationPrepStrengthCard | null => {
+      const item = breakdown[key];
+      const strongEnough =
+        item &&
+        (item.verdict === "strong" ||
+          item.score >= 75 ||
+          (key === "sourceQuality" && job.sourceQuality === "full_description"));
+
+      if (!item || !strongEnough) {
+        return null;
+      }
+
+      const summary = prepStrengthSummary(key, item, job);
+      const detail = previewText(item.notes, 150);
+
+      return {
+        key: String(key),
+        label: prepStrengthLabel(key),
+        summary,
+        detail: detail === summary ? null : detail,
+        chips: extractApplicationPrepKeywords([item.notes, summary]),
+        tone: item.verdict === "strong" ? ("success" as const) : ("info" as const)
+      };
+    })
+    .filter((item): item is ApplicationPrepStrengthCard => item !== null);
+};
+
+const hasMajorRiskFlag = (job: Job) => {
+  const review = job.latestAiReview;
+
+  if (!review) {
+    return false;
+  }
+
+  const majorRiskPattern =
+    /\b(blocker|critical|major|required|must[- ]have|visa|work permit|relocat|onsite|salary|compensation|german|language|clearance)\b/i;
+
+  return review.riskFlags.some((flag) => majorRiskPattern.test(flag));
+};
+
+const prepDecisionDone = (job: Job) =>
+  ["interested", "applied", "interviewing", "offer"].includes(job.userDecision ?? "");
+
+const addPipelinePrepChecklist = (job: Job, checklist: ApplicationPrep["checklist"]) => {
+  const userDecision = job.userDecision ?? "undecided";
+  const applicationStatus = job.applicationStatus ?? "not_started";
+
+  if (userDecision === "undecided") {
+    checklist.push({ label: "Mark interested/maybe/not interested", status: "todo" });
+  } else if (userDecision === "interested") {
+    checklist.push({ label: "Mark interested", status: "done" });
+  } else if (userDecision === "maybe") {
+    checklist.push({ label: "Marked maybe", status: "done" });
+  } else if (userDecision === "not_interested") {
+    checklist.push({ label: "Marked not interested", status: "done" });
+  } else if (userDecision === "applied") {
+    checklist.push({ label: "Decision saved: Applied", status: "done" });
+  } else if (userDecision === "interviewing") {
+    checklist.push({ label: "Decision saved: Interviewing", status: "done" });
+  } else if (userDecision === "offer") {
+    checklist.push({ label: "Decision saved: Offer", status: "done" });
+  }
+
+  if (applicationStatus === "not_started") {
+    if (userDecision === "interested") {
+      checklist.push({ label: "Set application status", status: "todo" });
+    }
+  } else if (applicationStatus === "preparing") {
+    checklist.push({ label: "Application preparation started", status: "done" });
+  } else if (applicationStatus === "applied") {
+    checklist.push({ label: "Application submitted", status: "done" });
+  } else if (applicationStatus === "interviewing") {
+    checklist.push({ label: "Interview stage active", status: "done" });
+  } else if (applicationStatus === "follow_up_needed") {
+    checklist.push({ label: "Follow-up needed", status: "warning" });
+  } else if (["offer", "accepted"].includes(applicationStatus)) {
+    checklist.push({ label: "Application outcome is positive", status: "done" });
+  } else if (["rejected", "declined"].includes(applicationStatus)) {
+    checklist.push({ label: "Application closed", status: "warning" });
+  }
+
+  if (job.nextAction?.trim()) {
+    checklist.push({ label: "Next action saved", status: "done" });
+  }
+};
+
+export const getApplicationPrep = (job: Job): ApplicationPrep => {
+  const review = job.latestAiReview;
+  const needsFullDescription = sourceNeedsFullDescription(job);
+  const checklist: ApplicationPrep["checklist"] = [];
+  const skillsToEmphasize = uniqueList(fitStrengthNotes(job));
+  const concernsToAddress = uniqueList([
+    ...(needsFullDescription ? ["Incomplete source limits application confidence."] : []),
+    ...(review?.riskFlags ?? []),
+    ...weakFitBreakdownNotes(job)
+  ]);
+  const questionsToClarify = uniqueList(review?.clarificationQuestions ?? []);
+  const strengthCards = fitStrengthCards(job);
+  const skillChips = uniqueList(
+    extractApplicationPrepKeywords([
+      job.title,
+      job.location,
+      remoteTypeLabels[job.remoteType] ?? job.remoteType,
+      job.description?.summaryText,
+      job.description?.fullText,
+      job.description?.rawSourceText,
+      review?.reviewText,
+      review?.cvAngle,
+      ...(review?.riskFlags ?? []),
+      ...(review?.clarificationQuestions ?? []),
+      ...strengthCards.flatMap((card) => [card.summary, card.detail, ...card.chips])
+    ])
+  );
+  const positioning =
+    review?.cvAngle.trim() ||
+    (review
+      ? `Position the application around the strongest overlap between ${job.title} and the reviewed fit evidence.`
+      : "Run AI review to produce a CV angle before writing application materials.");
+
+  if (needsFullDescription) {
+    checklist.push({ label: "Enrich job", status: "todo" });
+    checklist.push({
+      label: review ? "Rerun AI review after enrichment" : "Run AI review after enrichment",
+      status: review ? "warning" : "todo"
+    });
+    addPipelinePrepChecklist(job, checklist);
+
+    return {
+      readiness: {
+        label: "Not ready",
+        tone: "danger",
+        reason: "Add full job description before preparing application"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  checklist.push({ label: "Full job description available", status: "done" });
+
+  if (!review) {
+    checklist.push({ label: "Run AI review", status: "todo" });
+    addPipelinePrepChecklist(job, checklist);
+
+    return {
+      readiness: {
+        label: "Needs info",
+        tone: "warning",
+        reason: "Run AI review before preparing application"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  if (job.status === "ready_for_analysis") {
+    checklist.push({ label: "Previous AI review available", status: "warning" });
+    checklist.push({ label: "Rerun AI review", status: "todo" });
+    addPipelinePrepChecklist(job, checklist);
+
+    return {
+      readiness: {
+        label: "Needs info",
+        tone: "warning",
+        reason: "Rerun AI review before preparing application"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  checklist.push({ label: "AI review complete", status: "done" });
+
+  const applicationStatus = job.applicationStatus ?? "not_started";
+  const reviewSuggestsApply = review.decision === "apply" || review.score >= 75;
+  const reviewNeedsManualDecision =
+    review.decision === "maybe" || review.decision === "review_manually";
+  const reviewSuggestsLowFit = review.decision === "skip" || review.score <= 45;
+  const applicationInProgress = ["applied", "interviewing", "offer", "accepted"].includes(
+    applicationStatus
+  );
+
+  if (reviewSuggestsApply) {
+    checklist.push({
+      label: "Mark interested and prepare application",
+      status: prepDecisionDone(job) || applicationInProgress ? "done" : "todo"
+    });
+  }
+
+  if (reviewNeedsManualDecision) {
+    checklist.push({
+      label:
+        questionsToClarify.length > 0
+          ? "Answer clarification questions"
+          : "Resolve review caveats",
+      status: "todo"
+    });
+  }
+
+  if (reviewSuggestsLowFit) {
+    checklist.push({ label: "Decide whether to archive", status: "todo" });
+  }
+
+  addPipelinePrepChecklist(job, checklist);
+
+  if (applicationStatus === "applied") {
+    return {
+      readiness: {
+        label: "Ready",
+        tone: "success",
+        reason: "Application submitted; keep tracking follow-up steps"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  if (["interviewing", "offer", "accepted"].includes(applicationStatus)) {
+    return {
+      readiness: {
+        label: "Ready",
+        tone: "success",
+        reason: "Application is already moving through the pipeline"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  if (reviewSuggestsLowFit) {
+    return {
+      readiness: {
+        label: "Not ready",
+        tone: "danger",
+        reason: "Review suggests low fit"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  if (reviewSuggestsApply) {
+    const majorRisk = hasMajorRiskFlag(job);
+
+    return {
+      readiness: {
+        label: majorRisk ? "Needs info" : "Ready",
+        tone: majorRisk ? "warning" : "success",
+        reason: majorRisk
+          ? "Address major risk flags before preparing application"
+          : "Review is strong enough to start application prep"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  if (reviewNeedsManualDecision) {
+    return {
+      readiness: {
+        label: "Needs info",
+        tone: "warning",
+        reason: "Review needs clarification before application prep"
+      },
+      positioning,
+      skillChips,
+      strengthCards,
+      skillsToEmphasize,
+      concernsToAddress,
+      questionsToClarify,
+      checklist
+    };
+  }
+
+  return {
+    readiness: {
+      label: "Needs info",
+      tone: "neutral",
+      reason: "Review is mixed; decide whether this role is worth preparing"
+    },
+    positioning,
+    skillChips,
+    strengthCards,
+    skillsToEmphasize,
+    concernsToAddress,
+    questionsToClarify,
+    checklist
+  };
 };
 
 export const getJobActionPlan = (job: Job): JobActionPlan => {

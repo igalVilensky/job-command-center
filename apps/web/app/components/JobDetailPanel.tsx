@@ -1,5 +1,6 @@
 import { type FormEvent } from "react";
 
+import { ApplicationPrepPanel } from "./ApplicationPrepPanel";
 import { AiReviewPanel } from "./AiReviewPanel";
 import { JobEnrichmentForm } from "./JobEnrichmentForm";
 import { PipelineForm } from "./PipelineForm";
@@ -47,6 +48,7 @@ type JobDetailPanelProps = {
 const detailTabs: { key: JobDetailTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "review", label: "AI Review" },
+  { key: "applicationPrep", label: "Application Prep" },
   { key: "description", label: "Description" },
   { key: "pipeline", label: "Pipeline" },
   { key: "enrichment", label: "Enrichment" }
@@ -96,6 +98,10 @@ export function JobDetailPanel({
   const review = job.latestAiReview;
   const actionPlan = getJobActionPlan(job);
   const pipelineFormId = `pipeline-form-${job.id}`;
+  const showPrepareApplicationAction = Boolean(
+    review &&
+      (actionPlan.primaryAction.kind === "apply" || actionPlan.primaryAction.kind === "decide")
+  );
   const runActionPlanPrimary = () => {
     if (actionPlan.primaryAction.kind === "enrich") {
       onTabChange("enrichment");
@@ -241,18 +247,31 @@ export function JobDetailPanel({
                   <p className="muted">{actionPlan.primaryAction.description}</p>
                 </div>
                 {actionPlan.primaryAction.kind === "none" ? (
-                  <button className="button-secondary" type="button" onClick={() => onTabChange("pipeline")}>
-                    View pipeline
-                  </button>
+                  <div className="button-row">
+                    <button className="button-secondary" type="button" onClick={() => onTabChange("pipeline")}>
+                      View pipeline
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    className="button-primary"
-                    disabled={primaryActionDisabled}
-                    type="button"
-                    onClick={runActionPlanPrimary}
-                  >
-                    {actionPlan.primaryAction.label}
-                  </button>
+                  <div className="button-row">
+                    <button
+                      className="button-primary"
+                      disabled={primaryActionDisabled}
+                      type="button"
+                      onClick={runActionPlanPrimary}
+                    >
+                      {actionPlan.primaryAction.label}
+                    </button>
+                    {showPrepareApplicationAction ? (
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => onTabChange("applicationPrep")}
+                      >
+                        Prepare application
+                      </button>
+                    ) : null}
+                  </div>
                 )}
               </div>
 
@@ -348,6 +367,16 @@ export function JobDetailPanel({
 
         {activeTab === "review" ? (
           <AiReviewPanel isBusy={isBusy} job={job} onRunReview={onRunReview} user={user} />
+        ) : null}
+
+        {activeTab === "applicationPrep" ? (
+          <ApplicationPrepPanel
+            isBusy={isBusy}
+            job={job}
+            onRunReview={onRunReview}
+            onTabChange={onTabChange}
+            user={user}
+          />
         ) : null}
 
         {activeTab === "description" ? (

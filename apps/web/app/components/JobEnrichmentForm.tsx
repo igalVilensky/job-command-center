@@ -6,6 +6,7 @@ import {
   type User,
   enrichmentSourceQualityOptions
 } from "./types";
+import { sourceQualityBadgeSpec } from "./StatusBadge";
 
 type JobEnrichmentFormProps = {
   job: Job;
@@ -72,7 +73,7 @@ export function JobEnrichmentForm({
             >
               {enrichmentSourceQualityOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {sourceQualityBadgeSpec(option).label}
                 </option>
               ))}
             </select>

@@ -8,6 +8,7 @@ import {
   formatDate,
   userDecisionOptions
 } from "./types";
+import { formatStateLabel } from "./StatusBadge";
 
 type PipelineFormProps = {
   job: Job;
@@ -33,7 +34,7 @@ export function PipelineForm({
       <div className="section-heading">
         <div>
           <h4>Pipeline</h4>
-          <p className="muted">{job.applicationStatus ?? "not_started"}</p>
+          <p className="muted">{formatStateLabel(job.applicationStatus ?? "not_started")}</p>
         </div>
       </div>
 
@@ -53,7 +54,7 @@ export function PipelineForm({
             >
               {userDecisionOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {formatStateLabel(option)}
                 </option>
               ))}
             </select>
@@ -67,7 +68,7 @@ export function PipelineForm({
             >
               {applicationStatusOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {formatStateLabel(option)}
                 </option>
               ))}
             </select>

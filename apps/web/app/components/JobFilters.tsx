@@ -1,4 +1,5 @@
 import { applicationStatusOptions, userDecisionOptions } from "./types";
+import { formatStateLabel } from "./StatusBadge";
 
 type JobFiltersProps = {
   searchQuery: string;
@@ -35,7 +36,7 @@ export function JobFilters({
           <option value="">All decisions</option>
           {userDecisionOptions.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {formatStateLabel(option)}
             </option>
           ))}
         </select>
@@ -50,7 +51,7 @@ export function JobFilters({
           <option value="">All statuses</option>
           {applicationStatusOptions.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {formatStateLabel(option)}
             </option>
           ))}
         </select>
