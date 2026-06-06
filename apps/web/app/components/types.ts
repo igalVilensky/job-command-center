@@ -97,6 +97,7 @@ export type Job = {
   followUpDate: string | null;
   appliedAt: string | null;
   rejectedAt: string | null;
+  importedEmailId: string | null;
   importedAt: string;
   updatedAt: string;
   archivedAt: string | null;

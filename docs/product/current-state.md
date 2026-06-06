@@ -131,8 +131,9 @@ Milestone 01 project skeleton has been created.
 - Zero-job extraction is valid, marks the imported email extraction as succeeded, and can return warnings for low-confidence sources.
 - Re-running extraction for the same imported email skips duplicate jobs by normalized company/title and keeps the linked job count accurate.
 - The web app surfaces safe backend error details for extraction failures.
-- `apps/web` has a simple `Imports` view for simulating an imported email, viewing import history, and extracting jobs from a saved email.
-- The Imports view now distinguishes imported emails from extracted jobs, shows not-yet-extracted emails as `Not extracted yet`, and marks processed emails with extracted-job status.
+- `apps/web` has an `Imports` inbox for processing imported job-alert emails into jobs.
+- The Imports inbox filters imported emails client-side by all, not extracted, extracted, failed, and has jobs, with counts for each filter.
+- The Imports inbox has a deterministic `Process next` workflow that selects the first not-yet-extracted email and focuses its detail panel without auto-extracting.
 - Email account Prisma models exist for Gmail OAuth connections.
 - Gmail OAuth tokens are stored through an encryption helper backed by `EMAIL_TOKEN_ENCRYPTION_KEY`.
 - Authenticated Gmail routes exist:
@@ -144,12 +145,12 @@ Milestone 01 project skeleton has been created.
   - `GET /gmail/oauth/callback`
 - Gmail status returns safe account info only and never returns tokens.
 - Manual Gmail import uses stored Gmail OAuth credentials to fetch recent messages, deduplicates them into `ImportedEmail`, and does not automatically extract jobs.
-- The `Imports` view includes Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, import history, and explicit email extraction.
+- The `Imports` view includes compact Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, paste extraction, the imported email inbox, and explicit email extraction.
 - Gmail connection state is clearer in the web app: disconnected users see a single connect action and helper text, while connected users see account details, last import, a disconnect action, and the Gmail import form.
 - Milestone 15 adds a calmer frontend visual design system with warmer neutral backgrounds, softer surfaces, softer borders, rounded controls, and quieter destructive actions.
 - Status display now uses semantic badge tones for neutral, info, success, warning, danger, accent, and muted states instead of same-looking grey tags.
 - Import, extraction, source quality, job status, next action, AI decision, and fit verdict states now map consistently to meaningful status colors.
-- Imported email rows are more scannable: each row shows a status rail based on extraction state, subject-first hierarchy, sender/date metadata, muted preview text, a prominent extraction pill, and clear Extract/Re-run/Retry plus View details actions.
+- Imported email rows are more scannable: each row shows a status rail based on extraction state, subject-first hierarchy, sender/date metadata, muted preview text, a prominent extraction pill, and prioritized actions where only not-extracted or failed emails get primary Extract/Retry actions.
 - Created/imported job lists now use the same compact job row style as the Job Queue, with title, company, source-quality badge, job-status badge, next-action badge, and an Open job action.
 - Red is reserved for failed/destructive states, while success no longer acts as the whole-app accent.
 

@@ -950,6 +950,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           importedEmailWarnings={importedEmailWarnings}
           importedEmails={importedEmails}
           isBusy={isBusy}
+          jobs={jobs}
           onDisconnectGmail={() => void handleDisconnectGmail()}
           onExtractImportedEmail={(id) => void handleExtractImportedEmail(id)}
           onExtractJobs={handleExtractJobs}

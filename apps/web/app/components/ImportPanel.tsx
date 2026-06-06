@@ -1,4 +1,4 @@
-import { type FormEvent } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 
 import {
   type GmailImportFormState,
@@ -29,6 +29,7 @@ type ImportPanelProps = {
   gmailImportForm: GmailImportFormState;
   extractedJobs: Job[];
   importedEmailExtractedJobs: Job[];
+  jobs: Job[];
   importWarnings: string[];
   importedEmailWarnings: string[];
   importedEmails: ImportedEmail[];
@@ -51,6 +52,16 @@ type ImportPanelProps = {
   updateGmailImportField: (field: keyof GmailImportFormState, value: string) => void;
 };
 
+type ImportInboxFilter = "all" | "not_extracted" | "extracted" | "failed" | "has_jobs";
+
+const importInboxFilters: { id: ImportInboxFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "not_extracted", label: "Not extracted" },
+  { id: "extracted", label: "Extracted" },
+  { id: "failed", label: "Failed" },
+  { id: "has_jobs", label: "Has jobs" }
+];
+
 const importedEmailSender = (email: ImportedEmail) =>
   email.fromName || email.fromEmail || email.providerMessageId;
 
@@ -59,7 +70,7 @@ const importedEmailPreview = (email: ImportedEmail) =>
 
 const importedEmailActionLabel = (email: ImportedEmail) => {
   if (email.extractionStatus === "succeeded") {
-    return "Re-run extraction";
+    return "Re-run";
   }
 
   if (email.extractionStatus === "failed") {
@@ -67,6 +78,57 @@ const importedEmailActionLabel = (email: ImportedEmail) => {
   }
 
   return "Extract jobs";
+};
+
+const emailNeedsPrimaryAction = (email: ImportedEmail) =>
+  email.extractionStatus === "not_started" || email.extractionStatus === "failed";
+
+const importedEmailDetailsLabel = (email: ImportedEmail, selected: boolean) => {
+  if (selected) {
+    return "Selected";
+  }
+
+  if (email.extractionStatus === "succeeded" && email.jobCount > 0) {
+    return "View jobs";
+  }
+
+  return "View details";
+};
+
+const matchesImportInboxFilter = (email: ImportedEmail, filter: ImportInboxFilter) => {
+  if (filter === "not_extracted") {
+    return email.extractionStatus === "not_started";
+  }
+
+  if (filter === "extracted") {
+    return email.extractionStatus === "succeeded";
+  }
+
+  if (filter === "failed") {
+    return email.extractionStatus === "failed";
+  }
+
+  if (filter === "has_jobs") {
+    return email.jobCount > 0;
+  }
+
+  return true;
+};
+
+const filteredInboxEmptyMessage = (
+  importedEmailCount: number,
+  filter: ImportInboxFilter,
+  notExtractedCount: number
+) => {
+  if (importedEmailCount === 0) {
+    return "Import from Gmail to add job-alert emails.";
+  }
+
+  if (filter === "not_extracted" && notExtractedCount === 0) {
+    return "All imported emails have been extracted.";
+  }
+
+  return "No emails match this filter.";
 };
 
 const noisyGmailLabels = new Set([
@@ -109,6 +171,7 @@ export function ImportPanel({
   gmailImportForm,
   extractedJobs,
   importedEmailExtractedJobs,
+  jobs,
   importWarnings,
   importedEmailWarnings,
   importedEmails,
@@ -130,8 +193,60 @@ export function ImportPanel({
   updateImportedEmailField,
   updateGmailImportField
 }: ImportPanelProps) {
+  const [activeInboxFilter, setActiveInboxFilter] = useState<ImportInboxFilter>("all");
+  const selectedEmailDetailRef = useRef<HTMLElement | null>(null);
   const gmailConnected = Boolean(gmailStatus?.connected);
   const gmailStatusLabel = gmailConnected ? "Connected" : "Disconnected";
+  const inboxCounts = useMemo(
+    () => ({
+      all: importedEmails.length,
+      not_extracted: importedEmails.filter((email) => email.extractionStatus === "not_started").length,
+      extracted: importedEmails.filter((email) => email.extractionStatus === "succeeded").length,
+      failed: importedEmails.filter((email) => email.extractionStatus === "failed").length,
+      has_jobs: importedEmails.filter((email) => email.jobCount > 0).length
+    }),
+    [importedEmails]
+  );
+  const filteredImportedEmails = useMemo(
+    () => importedEmails.filter((email) => matchesImportInboxFilter(email, activeInboxFilter)),
+    [activeInboxFilter, importedEmails]
+  );
+  const nextUnprocessedEmail = importedEmails.find(
+    (email) => email.extractionStatus === "not_started"
+  );
+  const selectedEmailCreatedJobs = selectedImportedEmail
+    ? [
+        ...importedEmailExtractedJobs,
+        ...jobs.filter(
+          (job) =>
+            job.importedEmailId === selectedImportedEmail.id &&
+            !importedEmailExtractedJobs.some((extractedJob) => extractedJob.id === job.id)
+        )
+      ]
+    : [];
+  const selectedEmailVisibleJobCount = selectedEmailCreatedJobs.length;
+
+  const focusSelectedEmailDetail = () => {
+    window.requestAnimationFrame(() => {
+      selectedEmailDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      selectedEmailDetailRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  const selectEmailForDetail = (email: ImportedEmail) => {
+    onSelectImportedEmail(email);
+    focusSelectedEmailDetail();
+  };
+
+  const processNextImportedEmail = () => {
+    if (!nextUnprocessedEmail) {
+      return;
+    }
+
+    setActiveInboxFilter("not_extracted");
+    onSelectImportedEmail(nextUnprocessedEmail);
+    focusSelectedEmailDetail();
+  };
 
   return (
     <section className="profile-panel">
@@ -141,6 +256,91 @@ export function ImportPanel({
           Refresh imports
         </button>
       </div>
+
+      <section className="gmail-compact-panel" aria-label="Gmail import">
+        <div className="section-heading">
+          <div>
+            <h3>Gmail import</h3>
+            <p className="muted">Import recent job-alert emails, then extract them when ready.</p>
+          </div>
+          <BadgeRow label={`Gmail ${gmailStatusLabel}`}>
+            <StatusBadge label={gmailStatusLabel} tone={gmailConnected ? "success" : "muted"} />
+          </BadgeRow>
+        </div>
+
+        {gmailConnected ? (
+          <>
+            <div className="gmail-status-line">
+              <span>{gmailStatus?.emailAddress ?? "Connected account"}</span>
+              <span>Last import: {formatDate(gmailStatus?.lastSyncAt ?? null)}</span>
+              <button
+                className="button-danger button-small"
+                disabled={isBusy || !user}
+                type="button"
+                onClick={onDisconnectGmail}
+              >
+                Disconnect
+              </button>
+            </div>
+
+            <form className="job-form gmail-import-form" onSubmit={onImportFromGmail}>
+              <div className="form-grid">
+                <label>
+                  Gmail query
+                  <input
+                    value={gmailImportForm.query}
+                    onChange={(event) => updateGmailImportField("query", event.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Max results
+                  <input
+                    value={gmailImportForm.maxResults}
+                    onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
+                    inputMode="numeric"
+                  />
+                </label>
+              </div>
+
+              <div className="button-row">
+                <button disabled={isBusy || !user} type="submit">
+                  Import from Gmail
+                </button>
+              </div>
+            </form>
+
+            {gmailImportResult ? (
+              <dl className="detail-list gmail-result-list">
+                <div>
+                  <dt>Imported</dt>
+                  <dd>{gmailImportResult.imported}</dd>
+                </div>
+                <div>
+                  <dt>Duplicates</dt>
+                  <dd>{gmailImportResult.duplicates}</dd>
+                </div>
+                <div>
+                  <dt>Query</dt>
+                  <dd>{gmailImportResult.query}</dd>
+                </div>
+              </dl>
+            ) : null}
+          </>
+        ) : (
+          <div className="connect-prompt">
+            <p className="muted">Connect Gmail to import recent job-alert emails.</p>
+            <button
+              className="button-primary"
+              disabled={isBusy || !user}
+              type="button"
+              onClick={onStartGmailOAuth}
+            >
+              Connect Gmail
+            </button>
+          </div>
+        )}
+      </section>
 
       <details className="disclosure-panel">
         <summary>
@@ -196,117 +396,20 @@ export function ImportPanel({
         </div>
       ) : null}
 
-      <div className="description-block">
-        <h3>Created Jobs</h3>
-        {extractedJobs.length === 0 ? <p className="muted">No imported jobs yet.</p> : null}
-        <ul className="queue-list">
-          {extractedJobs.map((job) => (
-            <JobSummaryRow
-              actionLabel="Open job"
-              job={job}
-              key={job.id}
-              onOpenJob={onOpenJob}
-              showMeta={false}
-            />
-          ))}
-        </ul>
-      </div>
-
-      <section className="description-block">
-        <div className="section-heading">
-          <h3>Gmail</h3>
-          <BadgeRow label={`Gmail ${gmailStatusLabel}`}>
-            <StatusBadge label={gmailStatusLabel} tone={gmailConnected ? "success" : "muted"} />
-          </BadgeRow>
-        </div>
-
-        {gmailConnected ? (
-          <>
-            <dl className="detail-list">
-              <div>
-                <dt>Account</dt>
-                <dd>{gmailStatus?.emailAddress ?? "Not connected"}</dd>
-              </div>
-              <div>
-                <dt>Name</dt>
-                <dd>{gmailStatus?.displayName ?? "Not set"}</dd>
-              </div>
-              <div>
-                <dt>Last import</dt>
-                <dd>{formatDate(gmailStatus?.lastSyncAt ?? null)}</dd>
-              </div>
-            </dl>
-
-            <div className="button-row">
-              <button
-                className="button-danger"
-                disabled={isBusy || !user}
-                type="button"
-                onClick={onDisconnectGmail}
-              >
-                Disconnect
-              </button>
-            </div>
-
-            <form className="job-form gmail-import-form" onSubmit={onImportFromGmail}>
-              <div className="form-grid">
-                <label>
-                  Gmail query
-                  <input
-                    value={gmailImportForm.query}
-                    onChange={(event) => updateGmailImportField("query", event.target.value)}
-                  />
-                </label>
-
-                <label>
-                  Max results
-                  <input
-                    value={gmailImportForm.maxResults}
-                    onChange={(event) => updateGmailImportField("maxResults", event.target.value)}
-                    inputMode="numeric"
-                  />
-                </label>
-              </div>
-
-              <div className="button-row">
-                <button disabled={isBusy || !user} type="submit">
-                  Import from Gmail
-                </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <div className="connect-prompt">
-            <p className="muted">Connect Gmail to import recent job alert emails.</p>
-            <button
-              className="button-primary"
-              disabled={isBusy || !user}
-              type="button"
-              onClick={onStartGmailOAuth}
-            >
-              Connect Gmail
-            </button>
-          </div>
-        )}
-      </section>
-
-      {gmailImportResult ? (
+      {extractedJobs.length > 0 ? (
         <div className="description-block">
-          <h3>Gmail Import Result</h3>
-          <dl className="detail-list">
-            <div>
-              <dt>Imported</dt>
-              <dd>{gmailImportResult.imported}</dd>
-            </div>
-            <div>
-              <dt>Duplicates</dt>
-              <dd>{gmailImportResult.duplicates}</dd>
-            </div>
-            <div>
-              <dt>Query</dt>
-              <dd>{gmailImportResult.query}</dd>
-            </div>
-          </dl>
+          <h3>Created Jobs</h3>
+          <ul className="queue-list">
+            {extractedJobs.map((job) => (
+              <JobSummaryRow
+                actionLabel="Open job"
+                job={job}
+                key={job.id}
+                onOpenJob={onOpenJob}
+                showMeta={false}
+              />
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -401,15 +504,55 @@ export function ImportPanel({
       </details>
 
       <div className="jobs-layout">
-        <section>
-          <h3>Import History</h3>
-          {importedEmails.length === 0 ? <p className="muted">No imported emails yet.</p> : null}
+        <section className="import-inbox-panel">
+          <div className="section-heading">
+            <div>
+              <h3>Imported email inbox</h3>
+              <p className="muted">Process imported job-alert emails into jobs.</p>
+            </div>
+            <button
+              className="button-primary"
+              disabled={isBusy || !user || !nextUnprocessedEmail}
+              type="button"
+              onClick={processNextImportedEmail}
+            >
+              Process next
+            </button>
+          </div>
+
+          <div className="inbox-filter-row" role="tablist" aria-label="Imported email filters">
+            {importInboxFilters.map((filter) => (
+              <button
+                aria-selected={activeInboxFilter === filter.id}
+                className={`filter-chip${activeInboxFilter === filter.id ? " active" : ""}`}
+                key={filter.id}
+                role="tab"
+                type="button"
+                onClick={() => setActiveInboxFilter(filter.id)}
+              >
+                <span>{filter.label}</span>
+                <em>{inboxCounts[filter.id]}</em>
+              </button>
+            ))}
+          </div>
+
+          {filteredImportedEmails.length === 0 ? (
+            <p className="muted inbox-empty-message">
+              {filteredInboxEmptyMessage(
+                importedEmails.length,
+                activeInboxFilter,
+                inboxCounts.not_extracted
+              )}
+            </p>
+          ) : null}
+
           <ul className="email-list">
-            {importedEmails.map((email) => {
+            {filteredImportedEmails.map((email) => {
               const selected = selectedImportedEmail?.id === email.id;
               const tone = getExtractionStatusTone(email.extractionStatus);
               const canExtract = Boolean(user && email.bodyText?.trim());
               const sourceLabel = readableSourceLabel(email.sourceLabel);
+              const needsPrimaryAction = emailNeedsPrimaryAction(email);
 
               return (
                 <li key={email.id}>
@@ -440,21 +583,33 @@ export function ImportPanel({
                     </div>
 
                     <div className="email-import-actions">
-                      <button
-                        className="button-primary button-small"
-                        disabled={isBusy || !canExtract}
-                        type="button"
-                        onClick={() => onExtractImportedEmail(email.id)}
-                      >
-                        {importedEmailActionLabel(email)}
-                      </button>
+                      {needsPrimaryAction ? (
+                        <button
+                          className="button-primary button-small"
+                          disabled={isBusy || !canExtract}
+                          type="button"
+                          onClick={() => onExtractImportedEmail(email.id)}
+                        >
+                          {importedEmailActionLabel(email)}
+                        </button>
+                      ) : null}
                       <button
                         className="button-secondary button-small"
                         type="button"
-                        onClick={() => onSelectImportedEmail(email)}
+                        onClick={() => selectEmailForDetail(email)}
                       >
-                        {selected ? "Selected" : "View details"}
+                        {importedEmailDetailsLabel(email, selected)}
                       </button>
+                      {!needsPrimaryAction ? (
+                        <button
+                          className="button-secondary button-small"
+                          disabled={isBusy || !canExtract}
+                          type="button"
+                          onClick={() => onExtractImportedEmail(email.id)}
+                        >
+                          {importedEmailActionLabel(email)}
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 </li>
@@ -463,24 +618,30 @@ export function ImportPanel({
           </ul>
         </section>
 
-        <section className="job-detail" aria-label="Imported email detail">
+        <section
+          className="job-detail import-inbox-detail"
+          aria-label="Imported email detail"
+          ref={selectedEmailDetailRef}
+          tabIndex={-1}
+        >
           {selectedImportedEmail ? (
-            <details className="email-detail" open>
-              <summary>
-                <span>Selected email</span>
-                <ExtractionStatusBadge email={selectedImportedEmail} />
-              </summary>
-
-              <div className="section-heading">
-                <div>
-                  <h3>{selectedImportedEmail.subject}</h3>
-                  <p className="muted">
-                    {selectedImportedEmail.fromName ||
-                      selectedImportedEmail.fromEmail ||
-                      "Unknown sender"}
-                  </p>
+            <div className="email-detail">
+              <div className="email-detail-heading">
+                <div className="email-detail-title">
+                  <span className="eyebrow">Selected email</span>
+                  <h3>{selectedImportedEmail.subject || "No subject"}</h3>
+                  <p className="muted">{importedEmailSender(selectedImportedEmail)}</p>
                 </div>
+                <ExtractionStatusBadge email={selectedImportedEmail} />
+              </div>
+
+              <div className="button-row email-detail-actions">
                 <button
+                  className={
+                    emailNeedsPrimaryAction(selectedImportedEmail)
+                      ? "button-primary"
+                      : "button-secondary"
+                  }
                   disabled={isBusy || !user || !selectedImportedEmail.bodyText?.trim()}
                   type="button"
                   onClick={() => onExtractImportedEmail(selectedImportedEmail.id)}
@@ -488,41 +649,18 @@ export function ImportPanel({
                   {importedEmailActionLabel(selectedImportedEmail)}
                 </button>
               </div>
+
               {selectedImportedEmail.extractionStatus === "succeeded" ? (
                 <p className="muted">Extraction complete. Re-running will skip duplicates.</p>
               ) : null}
 
               <dl className="detail-list">
                 <div>
-                  <dt>From</dt>
-                  <dd>
-                    {selectedImportedEmail.fromName ||
-                      selectedImportedEmail.fromEmail ||
-                      "Unknown sender"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Message ID</dt>
-                  <dd>{selectedImportedEmail.providerMessageId}</dd>
-                </div>
-                <div>
                   <dt>Received</dt>
                   <dd>{formatDate(selectedImportedEmail.receivedAt)}</dd>
                 </div>
                 <div>
-                  <dt>Label</dt>
-                  <dd>{readableSourceLabel(selectedImportedEmail.sourceLabel) ?? "Not set"}</dd>
-                </div>
-                <div>
-                  <dt>Import</dt>
-                  <dd>
-                    <BadgeRow>
-                      <ImportStatusBadge status={selectedImportedEmail.importStatus} />
-                    </BadgeRow>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Extraction</dt>
+                  <dt>State</dt>
                   <dd>
                     <BadgeRow>
                       <ExtractionStatusBadge email={selectedImportedEmail} />
@@ -531,7 +669,12 @@ export function ImportPanel({
                 </div>
                 <div>
                   <dt>Extracted jobs</dt>
-                  <dd>{selectedEmailJobCountText(selectedImportedEmail)}</dd>
+                  <dd>
+                    {selectedEmailJobCountText(selectedImportedEmail)}
+                    {selectedEmailVisibleJobCount > 0
+                      ? ` (${selectedEmailVisibleJobCount} shown)`
+                      : ""}
+                  </dd>
                 </div>
               </dl>
 
@@ -564,11 +707,11 @@ export function ImportPanel({
 
               <div className="description-block">
                 <h4>Created Jobs</h4>
-                {importedEmailExtractedJobs.length === 0 ? (
+                {selectedEmailCreatedJobs.length === 0 ? (
                   <p className="muted">{selectedEmailEmptyJobsMessage(selectedImportedEmail)}</p>
                 ) : null}
                 <ul className="queue-list">
-                  {importedEmailExtractedJobs.map((job) => (
+                  {selectedEmailCreatedJobs.map((job) => (
                     <JobSummaryRow
                       actionLabel="Open job"
                       job={job}
@@ -579,9 +722,12 @@ export function ImportPanel({
                   ))}
                 </ul>
               </div>
-            </details>
+            </div>
           ) : (
-            <p className="muted">Select an imported email to view details.</p>
+            <div className="empty-detail-state">
+              <h3>No email selected</h3>
+              <p className="muted">Select an imported email or use Process next.</p>
+            </div>
           )}
         </section>
       </div>
