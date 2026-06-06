@@ -1063,6 +1063,73 @@ h5 {
   padding: 14px;
 }
 
+.action-plan-card {
+  box-shadow: var(--shadow-soft);
+  grid-column: 1 / -1;
+}
+
+.action-plan-card .section-heading {
+  align-items: flex-start;
+}
+
+.action-plan-checklist {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.action-plan-checklist li {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.action-plan-checklist span {
+  color: #283247;
+  font-size: 0.9rem;
+  font-weight: 750;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.action-plan-checklist em {
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 850;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.action-plan-checklist .checklist-done em {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.action-plan-checklist .checklist-todo em {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.action-plan-checklist .checklist-warning em {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.action-plan-block {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
 .detail-section p {
   color: #283247;
   line-height: 1.55;
@@ -1573,6 +1640,16 @@ h5 {
   .filter-chip {
     justify-content: space-between;
     width: 100%;
+  }
+
+  .action-plan-checklist li {
+    align-items: flex-start;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .action-plan-checklist em {
+    justify-self: start;
   }
 
   .detail-list div,

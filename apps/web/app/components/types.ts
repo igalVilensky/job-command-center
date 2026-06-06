@@ -230,6 +230,29 @@ export type QuickJobDecision = "interested" | "maybe" | "not_interested";
 
 export type JobDetailTab = "overview" | "review" | "description" | "pipeline" | "enrichment";
 
+export type JobActionPlanPrimaryKind =
+  | "enrich"
+  | "review"
+  | "decide"
+  | "apply"
+  | "clarify"
+  | "follow_up"
+  | "none";
+
+export type JobActionPlan = {
+  primaryAction: {
+    label: string;
+    kind: JobActionPlanPrimaryKind;
+    description: string;
+  };
+  checklist: {
+    label: string;
+    status: "done" | "todo" | "warning";
+  }[];
+  blockers: string[];
+  nextQuestions: string[];
+};
+
 export type QueueGroup = {
   key: string;
   label: string;
@@ -605,15 +628,188 @@ export const getJobNextAction = (job: Job) => {
   return "Triage";
 };
 
+const pipelineHasNextStep = (job: Job) =>
+  (job.applicationStatus ?? "not_started") !== "not_started" || Boolean(job.nextAction?.trim());
+
+const weakFitBreakdownNotes = (job: Job) => {
+  const breakdown = job.latestAiReview?.fitBreakdownJson;
+
+  if (!breakdown) {
+    return [];
+  }
+
+  return fitBreakdownRows
+    .map(({ key, label }) => {
+      const item = breakdown[key];
+
+      if (!item || (item.verdict !== "weak" && item.score >= 50)) {
+        return null;
+      }
+
+      return `${label}: ${item.notes}`;
+    })
+    .filter((item): item is string => Boolean(item));
+};
+
+export const getJobActionPlan = (job: Job): JobActionPlan => {
+  const review = job.latestAiReview;
+  const needsFullDescription = sourceNeedsFullDescription(job);
+  const strongReview = Boolean(review && (review.decision === "apply" || review.score >= 75));
+  const manualReview = Boolean(
+    review && (review.decision === "maybe" || review.decision === "review_manually")
+  );
+  const decision = job.userDecision ?? "undecided";
+  const blockers = [
+    ...(!needsFullDescription ? [] : ["Review may be unreliable until the job has a full description."]),
+    ...(review?.riskFlags.slice(0, 3) ?? []),
+    ...weakFitBreakdownNotes(job).slice(0, 2)
+  ];
+  const nextQuestions = review?.clarificationQuestions.slice(0, 3) ?? [];
+  const checklist: JobActionPlan["checklist"] = [];
+
+  if (decision === "not_interested") {
+    return {
+      primaryAction: {
+        label: "Decision made",
+        kind: "none",
+        description: "This job is marked not interested. Keep it for reference or archive it."
+      },
+      checklist: [
+        { label: "Decision made: Not interested", status: "done" },
+        { label: "Archive when you no longer need it visible", status: "todo" }
+      ],
+      blockers: [],
+      nextQuestions: []
+    };
+  }
+
+  if (needsFullDescription) {
+    checklist.push(
+      { label: "Add full job description", status: "todo" },
+      {
+        label: review ? "Rerun review after enrichment" : "Run review after enrichment",
+        status: "warning"
+      }
+    );
+
+    if (decision === "interested" || decision === "maybe") {
+      checklist.push({
+        label: "Keep pipeline decision, but verify it after enrichment",
+        status: "warning"
+      });
+    }
+
+    return {
+      primaryAction: {
+        label: "Enrich job",
+        kind: "enrich",
+        description: "Add the full job description before relying on fit analysis."
+      },
+      checklist,
+      blockers,
+      nextQuestions
+    };
+  }
+
+  checklist.push({ label: "Source is good enough for review", status: "done" });
+
+  if (decision === "interested" || decision === "maybe") {
+    checklist.push(
+      review
+        ? { label: "AI review complete", status: "done" }
+        : { label: "Run AI review for confidence", status: "todo" },
+      { label: `Decision made: ${decision === "interested" ? "Interested" : "Maybe"}`, status: "done" },
+      {
+        label: pipelineHasNextStep(job) ? "Pipeline next step saved" : "Set application status or next action",
+        status: pipelineHasNextStep(job) ? "done" : "todo"
+      }
+    );
+
+    return {
+      primaryAction: {
+        label: "Follow up",
+        kind: "follow_up",
+        description: "Set the next pipeline step so this decision does not stall."
+      },
+      checklist,
+      blockers: review ? blockers : [],
+      nextQuestions: review ? nextQuestions : []
+    };
+  }
+
+  if (!review) {
+    checklist.push({ label: "Run AI review", status: "todo" });
+
+    return {
+      primaryAction: {
+        label: "Run AI review",
+        kind: "review",
+        description: "Score this role against your profile and surface risks or questions."
+      },
+      checklist,
+      blockers: [],
+      nextQuestions: []
+    };
+  }
+
+  checklist.push({ label: "AI review complete", status: "done" });
+
+  if (strongReview) {
+    checklist.push({ label: "Mark interested or start application planning", status: "todo" });
+
+    if (review.riskFlags.length > 0) {
+      checklist.push({ label: "Review risk flags before applying", status: "warning" });
+    }
+
+    return {
+      primaryAction: {
+        label: "Decide / apply",
+        kind: "apply",
+        description: "The review is strong. Decide whether to mark interested and start the application path."
+      },
+      checklist,
+      blockers,
+      nextQuestions
+    };
+  }
+
+  if (manualReview || nextQuestions.length > 0) {
+    checklist.push(
+      {
+        label: nextQuestions.length > 0 ? "Answer clarification questions" : "Resolve manual review caveats",
+        status: "todo"
+      },
+      { label: "Save a decision in Pipeline", status: "todo" }
+    );
+
+    return {
+      primaryAction: {
+        label: "Clarify",
+        kind: "clarify",
+        description: "Resolve the open questions or caveats before deciding."
+      },
+      checklist,
+      blockers,
+      nextQuestions
+    };
+  }
+
+  checklist.push({ label: "Save a decision or archive", status: "todo" });
+
+  return {
+    primaryAction: {
+      label: "Decide next step",
+      kind: "decide",
+      description: "Review the evidence, then move this job into pipeline or out of the queue."
+    },
+    checklist,
+    blockers,
+    nextQuestions
+  };
+};
+
 export const defaultJobDetailTab = (job: Job): JobDetailTab => {
-  if (job.latestAiReview) {
-    return "review";
-  }
-
-  if (sourceNeedsFullDescription(job)) {
-    return "enrichment";
-  }
-
+  void job;
   return "overview";
 };
 

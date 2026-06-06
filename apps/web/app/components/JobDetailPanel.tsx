@@ -13,9 +13,8 @@ import {
   formatLocationRemote,
   formatRemoteType,
   formatSalary,
-  getJobNextAction,
-  jobNeedsReview,
-  sourceNeedsFullDescription
+  getJobActionPlan,
+  getJobNextAction
 } from "./types";
 import {
   BadgeRow,
@@ -53,28 +52,16 @@ const detailTabs: { key: JobDetailTab; label: string }[] = [
   { key: "enrichment", label: "Enrichment" }
 ];
 
-const recommendedActionText = (job: Job) => {
-  if (sourceNeedsFullDescription(job)) {
-    return "Paste the full job description before relying on fit analysis.";
+const checklistStatusLabel = (status: "done" | "todo" | "warning") => {
+  if (status === "done") {
+    return "Done";
   }
 
-  if (jobNeedsReview(job)) {
-    return "Run AI review to get a score, decision, fit breakdown, and questions.";
+  if (status === "warning") {
+    return "Check";
   }
 
-  if (job.nextAction?.trim()) {
-    return job.nextAction;
-  }
-
-  if (job.latestAiReview?.decision === "apply" || (job.latestAiReview?.score ?? 0) >= 75) {
-    return "Decide whether to apply and save the next pipeline step.";
-  }
-
-  if (job.latestAiReview?.clarificationQuestions.length) {
-    return "Resolve the highest-impact clarification questions before deciding.";
-  }
-
-  return "Keep this job in triage, move it into pipeline, or archive it.";
+  return "To do";
 };
 
 export function JobDetailPanel({
@@ -107,21 +94,35 @@ export function JobDetailPanel({
   const summaryDescription = job.description?.summaryText ?? "";
   const isLongDescription = fullDescription.length > 1200;
   const review = job.latestAiReview;
+  const actionPlan = getJobActionPlan(job);
   const pipelineFormId = `pipeline-form-${job.id}`;
-  const primaryAction = sourceNeedsFullDescription(job)
-    ? {
-        label: "Enrich job",
-        onClick: () => onTabChange("enrichment")
-      }
-    : jobNeedsReview(job)
-      ? {
-          label: "Run AI review",
-          onClick: () => onRunReview(job.id)
-        }
-      : {
-          label: "Save pipeline",
-          onClick: onPipelineQuickSave
-        };
+  const runActionPlanPrimary = () => {
+    if (actionPlan.primaryAction.kind === "enrich") {
+      onTabChange("enrichment");
+      return;
+    }
+
+    if (actionPlan.primaryAction.kind === "review") {
+      onRunReview(job.id);
+      return;
+    }
+
+    if (actionPlan.primaryAction.kind === "clarify") {
+      onTabChange("review");
+      return;
+    }
+
+    if (
+      actionPlan.primaryAction.kind === "apply" ||
+      actionPlan.primaryAction.kind === "decide" ||
+      actionPlan.primaryAction.kind === "follow_up" ||
+      actionPlan.primaryAction.kind === "none"
+    ) {
+      onTabChange("pipeline");
+    }
+  };
+  const primaryActionDisabled =
+    actionPlan.primaryAction.kind === "review" ? isBusy || !user : false;
 
   const topRiskFlags = review?.riskFlags.slice(0, 3) ?? [];
   const topQuestions = review?.clarificationQuestions.slice(0, 3) ?? [];
@@ -150,14 +151,31 @@ export function JobDetailPanel({
         </div>
 
         <div className="button-row job-summary-actions">
-          <button
-            className="button-primary"
-            disabled={isBusy || !user}
-            type="button"
-            onClick={primaryAction.onClick}
-          >
-            {primaryAction.label}
-          </button>
+          {actionPlan.primaryAction.kind === "none" ? (
+            <button className="button-secondary" type="button" onClick={() => onTabChange("pipeline")}>
+              View pipeline
+            </button>
+          ) : (
+            <button
+              className="button-primary"
+              disabled={primaryActionDisabled}
+              type="button"
+              onClick={runActionPlanPrimary}
+            >
+              {actionPlan.primaryAction.label}
+            </button>
+          )}
+          {actionPlan.primaryAction.kind !== "enrich" &&
+          actionPlan.primaryAction.kind !== "review" ? (
+            <button
+              className="button-secondary"
+              disabled={isBusy || !user}
+              type="button"
+              onClick={onPipelineQuickSave}
+            >
+              Save pipeline
+            </button>
+          ) : null}
           <button
             className="button-danger"
             disabled={isBusy || !user}
@@ -216,10 +234,59 @@ export function JobDetailPanel({
       <section className="detail-tab-panel">
         {activeTab === "overview" ? (
           <section className="overview-grid" aria-label="Overview">
-            <div className="detail-section">
-              <h4>Next recommended action</h4>
-              <p>{recommendedActionText(job)}</p>
-            </div>
+            <section className="detail-section action-plan-card">
+              <div className="section-heading">
+                <div>
+                  <h4>Action Plan</h4>
+                  <p className="muted">{actionPlan.primaryAction.description}</p>
+                </div>
+                {actionPlan.primaryAction.kind === "none" ? (
+                  <button className="button-secondary" type="button" onClick={() => onTabChange("pipeline")}>
+                    View pipeline
+                  </button>
+                ) : (
+                  <button
+                    className="button-primary"
+                    disabled={primaryActionDisabled}
+                    type="button"
+                    onClick={runActionPlanPrimary}
+                  >
+                    {actionPlan.primaryAction.label}
+                  </button>
+                )}
+              </div>
+
+              <ul className="action-plan-checklist" aria-label="Action plan checklist">
+                {actionPlan.checklist.map((item) => (
+                  <li className={`checklist-${item.status}`} key={`${item.status}-${item.label}`}>
+                    <span>{item.label}</span>
+                    <em>{checklistStatusLabel(item.status)}</em>
+                  </li>
+                ))}
+              </ul>
+
+              {actionPlan.blockers.length > 0 ? (
+                <div className="action-plan-block">
+                  <h5>Blockers / risks</h5>
+                  <ul className="compact-list">
+                    {actionPlan.blockers.map((blocker) => (
+                      <li key={blocker}>{blocker}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {actionPlan.nextQuestions.length > 0 ? (
+                <div className="action-plan-block">
+                  <h5>Questions to answer</h5>
+                  <ul className="compact-list">
+                    {actionPlan.nextQuestions.map((question) => (
+                      <li key={question}>{question}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
 
             <div className="detail-section">
               <h4>Key metadata</h4>

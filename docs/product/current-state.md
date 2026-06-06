@@ -107,7 +107,9 @@ Milestone 01 project skeleton has been created.
 - Job Queue rows use action-aware primary buttons: Enrich for incomplete sources, Run review for review-ready jobs, and Open for reviewed jobs, with strong matches surfacing Interested as a prominent secondary action.
 - Job Queue filters include all, needs description, ready for review, strong matches, maybe/clarify, interested, and not interested, with client-side counts.
 - Opening a job switches to a focused route-like Job Detail view with Overview, AI Review, Description, Pipeline, and Enrichment tabs.
-- Job Detail chooses a default tab based on the job state: AI Review when a review exists, Enrichment when the source is incomplete, and Overview otherwise.
+- Job Detail opens on Overview and now shows a deterministic Action Plan near the top so the user sees what to do next before reading supporting evidence.
+- The Action Plan uses existing job data only: source quality/status, latest AI review score/decision, fit breakdown, risk flags, clarification questions, user decision, and pipeline state. It does not call AI or create new records.
+- Action Plan buttons route to the relevant existing workflow: Enrichment, Run AI review, AI Review for clarification, or Pipeline for deciding/follow-up.
 - Secondary forms are progressively disclosed. Manual job creation is behind a `New job` action, paste extraction is behind `Paste job text`, simulated imports are under `Developer / simulated import`, and Gmail controls only show workflow-relevant connected/disconnected actions.
 - The UX goal for Milestone 14 is lower cognitive load: queue pages support scanning and deciding what to open, while detail pages support working on one job at a time.
 - AI review presentation now starts with the short recommendation text before deeper fit breakdown, risk flags, CV angle, and clarification questions.
