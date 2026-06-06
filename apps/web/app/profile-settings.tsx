@@ -28,6 +28,7 @@ import {
   type PipelineFormState,
   type Profile,
   type ProfileFormState,
+  type QuickJobDecision,
   type QueueFilter,
   type User,
   cvToForm,
@@ -47,7 +48,6 @@ import {
   jobNeedsReview,
   previewText,
   profileToForm,
-  queueFilterLabels,
   sourceNeedsFullDescription,
   textToLanguages,
   textToList
@@ -703,6 +703,29 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleQuickJobDecision = async (id: string, decision: QuickJobDecision) => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ job: Job }>(`/jobs/${id}/pipeline`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          userDecision: decision
+        })
+      });
+
+      setSelectedJob((current) => (current?.id === id ? data.job : current));
+      await loadJobs();
+      setStatus(`Marked job ${decision === "not_interested" ? "not interested" : decision}`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Quick decision failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const savePipeline = async () => {
     if (!selectedJob) {
       return;
@@ -875,6 +898,14 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       return jobNeedsClarification(job);
     }
 
+    if (queueFilter === "interested") {
+      return job.userDecision === "interested";
+    }
+
+    if (queueFilter === "not_interested") {
+      return job.userDecision === "not_interested";
+    }
+
     return jobNeedsPipelineFollowUp(job);
   };
 
@@ -1026,15 +1057,6 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
                 />
               ) : null}
 
-              {queueFilter !== "all" ? (
-                <div className="active-filter-banner">
-                  <span>Showing: {queueFilterLabels[queueFilter]}</span>
-                  <button className="button-secondary button-small" type="button" onClick={() => setQueueFilter("all")}>
-                    Clear
-                  </button>
-                </div>
-              ) : null}
-
               <JobFilters
                 applicationStatusFilter={applicationStatusFilter}
                 searchQuery={jobSearchQuery}
@@ -1045,11 +1067,15 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
               />
 
               <JobQueuePanel
+                activeFilter={queueFilter}
+                allJobs={jobs}
                 isBusy={isBusy}
                 jobs={filteredJobs}
+                onFilterChange={setQueueFilter}
                 onArchiveJob={(id) => void handleArchiveJob(id)}
                 onEnrichJob={(job) => openJob(job, "enrichment")}
                 onOpenJob={(job) => openJob(job)}
+                onQuickDecision={(id, decision) => void handleQuickJobDecision(id, decision)}
                 onRunReview={(id) => void handleReviewJob(id)}
                 selectedJobId={null}
                 totalJobs={jobs.length}

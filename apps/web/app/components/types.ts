@@ -222,7 +222,11 @@ export type QueueFilter =
   | "ready_for_review"
   | "apply"
   | "maybe"
+  | "interested"
+  | "not_interested"
   | "follow_up";
+
+export type QuickJobDecision = "interested" | "maybe" | "not_interested";
 
 export type JobDetailTab = "overview" | "review" | "description" | "pipeline" | "enrichment";
 
@@ -234,11 +238,13 @@ export type QueueGroup = {
 };
 
 export const queueFilterLabels: Record<QueueFilter, string> = {
-  all: "All active jobs",
+  all: "All",
   needs_description: "Needs full description",
   ready_for_review: "Ready for review",
-  apply: "Strong matches / Apply",
+  apply: "Strong matches",
   maybe: "Maybe / clarify",
+  interested: "Interested",
+  not_interested: "Not interested",
   follow_up: "Pipeline follow-ups"
 };
 
@@ -544,12 +550,15 @@ export const jobNeedsClarification = (job: Job) => {
     return false;
   }
 
+  if ((job.userDecision ?? "") === "maybe") {
+    return true;
+  }
+
   return Boolean(
     review &&
       (review.decision === "maybe" ||
         review.decision === "review_manually" ||
-        review.clarificationQuestions.length > 0 ||
-        (job.userDecision ?? "") === "maybe")
+        review.clarificationQuestions.length > 0)
   );
 };
 

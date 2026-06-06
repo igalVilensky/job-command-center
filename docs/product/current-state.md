@@ -102,7 +102,10 @@ Milestone 01 project skeleton has been created.
 - The web app primary navigation is now `Dashboard`, `Jobs`, `Imports`, and `Profile`.
 - Milestone 14 adds a Dashboard as the default signed-in view. It summarizes jobs that need full descriptions, are ready for review, look like strong matches, need clarification, need pipeline follow-up, and the total active queue.
 - Dashboard summary cards navigate into the Jobs view with a matching queue filter so the user can act on one category at a time.
-- The Jobs view is now scan-first: filters/search, grouped queue sections, compact job rows, and row-level Open/Review/Enrich/Archive actions are shown without an inline detail editor.
+- The Jobs view is now scan-first: filters/search, queue filter chips with counts, grouped queue sections, compact job rows, and row-level Open/Review/Enrich/Archive actions are shown without an inline detail editor.
+- Job Queue supports quick triage from the queue: users can mark jobs Interested, Maybe, or Not interested through existing pipeline fields without opening Job Detail.
+- Job Queue rows use action-aware primary buttons: Enrich for incomplete sources, Run review for review-ready jobs, and Open for reviewed jobs, with strong matches surfacing Interested as a prominent secondary action.
+- Job Queue filters include all, needs description, ready for review, strong matches, maybe/clarify, interested, and not interested, with client-side counts.
 - Opening a job switches to a focused route-like Job Detail view with Overview, AI Review, Description, Pipeline, and Enrichment tabs.
 - Job Detail chooses a default tab based on the job state: AI Review when a review exists, Enrichment when the source is incomplete, and Overview otherwise.
 - Secondary forms are progressively disclosed. Manual job creation is behind a `New job` action, paste extraction is behind `Paste job text`, simulated imports are under `Developer / simulated import`, and Gmail controls only show workflow-relevant connected/disconnected actions.

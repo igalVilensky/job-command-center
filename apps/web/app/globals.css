@@ -667,6 +667,21 @@ h5 {
   margin-top: 12px;
 }
 
+.queue-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.queue-empty-message {
+  background: var(--surface-warm);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
 .queue-group {
   border-top: 1px solid var(--line);
   padding-top: 14px;
@@ -731,6 +746,18 @@ h5 {
   min-width: 0;
 }
 
+.job-row-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.job-row-heading > div {
+  min-width: 0;
+}
+
 .job-row-main strong,
 .job-row-main small {
   display: block;
@@ -758,10 +785,71 @@ h5 {
   overflow-wrap: anywhere;
 }
 
+.job-row-signal,
+.job-row-summary {
+  border-radius: 10px;
+  color: #384254;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+}
+
+.job-row-signal {
+  border: 1px solid var(--line);
+}
+
+.job-row-signal span {
+  display: inline-block;
+  font-weight: 850;
+  margin-right: 6px;
+}
+
+.job-row-signal.signal-danger {
+  background: var(--danger-soft);
+  border-color: #ead4d9;
+}
+
+.job-row-signal.signal-warning {
+  background: var(--warning-soft);
+  border-color: #eadfbf;
+}
+
+.job-row-summary {
+  background: var(--surface-soft);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .job-row-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.job-row-action-group {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.job-row-decision-actions {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.quick-decision.active {
+  background: var(--accent-soft);
+  border-color: #d7dcff;
+  color: var(--accent-strong);
+}
+
+.quick-decision-prominent:not(.active) {
+  background: var(--success-soft);
+  border-color: #cfe9dd;
+  color: var(--success);
 }
 
 .job-summary-row {
@@ -1469,13 +1557,15 @@ h5 {
   }
 
   .gmail-status-line,
+  .job-row-heading,
   .email-detail-heading {
     align-items: flex-start;
     display: grid;
     justify-content: stretch;
   }
 
-  .inbox-filter-row {
+  .inbox-filter-row,
+  .queue-filter-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1523,6 +1613,10 @@ h5 {
   }
 
   .inbox-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-filter-row {
     grid-template-columns: 1fr;
   }
 
