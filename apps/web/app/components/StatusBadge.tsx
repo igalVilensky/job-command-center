@@ -168,6 +168,23 @@ export function ImportStatusBadge({ status }: { status: string | null | undefine
   return <StatusBadge {...importStatusBadgeSpec(status)} />;
 }
 
+export const inboxStatusBadgeSpec = (status: string | null | undefined) =>
+  withFallback(
+    status,
+    {
+      active: { label: "Active", tone: "info" },
+      processed: { label: "Processed", tone: "success" },
+      hidden: { label: "Hidden", tone: "muted" },
+      likely_irrelevant: { label: "Likely irrelevant", tone: "muted" },
+      needs_check: { label: "Needs check", tone: "warning" }
+    },
+    "neutral"
+  );
+
+export function InboxStatusBadge({ status }: { status: string | null | undefined }) {
+  return <StatusBadge {...inboxStatusBadgeSpec(status)} />;
+}
+
 export const extractionStatusBadgeSpec = (
   status: string | null | undefined,
   jobCount?: number | null
@@ -211,6 +228,9 @@ export function ExtractionStatusBadge({
 
 export const getExtractionStatusTone = (status: string | null | undefined): BadgeTone =>
   extractionStatusBadgeSpec(status).tone;
+
+export const getInboxStatusTone = (status: string | null | undefined): BadgeTone =>
+  inboxStatusBadgeSpec(status).tone;
 
 export const fitVerdictBadgeSpec = (verdict: string | null | undefined) =>
   withFallback(

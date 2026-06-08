@@ -158,6 +158,10 @@ model ImportedEmail {
   rawMetadataJson   Json?
   importStatus      String   @default("imported")
   extractionStatus  String   @default("not_started")
+  inboxStatus       String   @default("active")
+  processedAt       DateTime?
+  hiddenAt          DateTime?
+  triageReason      String?  @db.Text
   jobCount          Int      @default(0)
   errorMessage      String?  @db.Text
   jobs              Job[]
@@ -168,6 +172,7 @@ model ImportedEmail {
   @@index([userId, receivedAt])
   @@index([userId, importStatus])
   @@index([userId, extractionStatus])
+  @@index([userId, inboxStatus])
 }
 
 model EmailAccount {

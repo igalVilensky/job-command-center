@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { callReviewJob, getAiProviderMetadata, REVIEW_PROMPT_VERSION } from "../lib/ai-client";
-import { validateReviewResponse } from "../lib/ai-validation";
 import { HttpError } from "../lib/http-error";
+import { reviewJobForUser } from "../lib/job-review";
 import {
   hasFullDescription,
   serializeAiReview,
@@ -54,21 +53,6 @@ const findOwnedJob = async (id: string, userId: string) => {
   }
 
   return job;
-};
-
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : "Unknown error");
-
-const markRunFailed = async (runId: string, message: string) => {
-  await prisma.automationRun
-    .update({
-      where: { id: runId },
-      data: {
-        status: "failed",
-        errorMessage: message,
-        finishedAt: new Date()
-      }
-    })
-    .catch(() => undefined);
 };
 
 jobsRouter.get(
@@ -267,164 +251,25 @@ jobsRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const userId = getUserId(req as AuthenticatedRequest);
-    const existingJob = await findOwnedJob(req.params.id, userId);
-    const providerMetadata = getAiProviderMetadata();
-    const profile = await prisma.candidateProfile.upsert({
-      where: { userId },
-      update: {},
-      create: { userId }
-    });
-    const activeCv = await prisma.candidateCv.findFirst({
-      where: {
-        userId,
-        isActive: true
-      },
-      orderBy: {
-        updatedAt: "desc"
-      }
-    });
-    const candidateProfile = {
-      ...profile,
-      activeCv: activeCv
-        ? {
-            id: activeCv.id,
-            sourceType: activeCv.sourceType,
-            sourceName: activeCv.sourceName,
-            sourceText: activeCv.sourceText.slice(0, 4000),
-            parsedProfileJson: activeCv.parsedProfileJson
-          }
-        : null
-    };
-    const inputText = [
-      profile.profession,
-      profile.bio,
-      profile.targetRoles.join(", "),
-      profile.strongSkills.join(", "),
-      profile.secondarySkills.join(", "),
-      profile.engineeringSkills.join(", "),
-      profile.aiSkills.join(", "),
-      profile.salaryMinEur ? `salaryMinEur: ${profile.salaryMinEur}` : null,
-      profile.salaryMaxEur ? `salaryMaxEur: ${profile.salaryMaxEur}` : null,
-      profile.minimumSalaryEur ? `legacyMinimumSalaryEur: ${profile.minimumSalaryEur}` : null,
-      profile.acceptableRemoteTypes.join(", "),
-      profile.preferredLocations.join(", "),
-      profile.locationNotes,
-      profile.salaryNotes,
-      profile.experienceSummary,
-      existingJob.title,
-      existingJob.company,
-      existingJob.description?.summaryText,
-      existingJob.description?.fullText,
-      existingJob.description?.rawSourceText
-    ]
-      .filter(Boolean)
-      .join("\n");
-    const run = await prisma.automationRun.create({
-      data: {
-        userId,
-        jobId: existingJob.id,
-        runType: "review_job",
-        provider: providerMetadata.provider,
-        model: providerMetadata.model,
-        status: "running",
-        inputChars: inputText.length,
-        metadataJson: {
-          promptVersion: REVIEW_PROMPT_VERSION
-        }
-      }
-    });
 
     try {
-      const aiPayload = await callReviewJob({
-        candidateProfile,
-        job: {
-          id: existingJob.id,
-          company: existingJob.company,
-          title: existingJob.title,
-          location: existingJob.location,
-          remoteType: existingJob.remoteType,
-          salaryMinEur: existingJob.salaryMinEur,
-          salaryMaxEur: existingJob.salaryMaxEur,
-          salaryText: existingJob.salaryText,
-          url: existingJob.url,
-          sourceQuality: existingJob.sourceQuality,
-          status: existingJob.status
-        },
-        description: existingJob.description
-          ? {
-              summaryText: existingJob.description.summaryText,
-              fullText: existingJob.description.fullText,
-              rawSourceText: existingJob.description.rawSourceText,
-              language: existingJob.description.language
-            }
-          : null
-      });
-      const reviewResponse = validateReviewResponse(aiPayload);
-
-      const result = await prisma.$transaction(async (tx) => {
-        const review = await tx.aiReview.create({
-          data: {
-            jobId: existingJob.id,
-            provider: providerMetadata.provider,
-            model: providerMetadata.model,
-            promptVersion: REVIEW_PROMPT_VERSION,
-            score: reviewResponse.score,
-            decision: reviewResponse.decision,
-            reviewText: reviewResponse.review,
-            riskFlags: reviewResponse.riskFlags,
-            cvAngle: reviewResponse.cvAngle,
-            clarificationQuestions: reviewResponse.clarificationQuestions,
-            ...(reviewResponse.fitBreakdown
-              ? {
-                  fitBreakdownJson: reviewResponse.fitBreakdown
-                }
-              : {}),
-            rawResponseJson: reviewResponse
-          }
-        });
-        const job = await tx.job.update({
-          where: { id: existingJob.id },
-          data: {
-            status: "analyzed"
-          },
-          include: jobInclude
-        });
-
-        await tx.automationRun.update({
-          where: { id: run.id },
-          data: {
-            status: "succeeded",
-            finishedAt: new Date(),
-            metadataJson: {
-              promptVersion: REVIEW_PROMPT_VERSION,
-              confidence: reviewResponse.confidence,
-              decision: reviewResponse.decision,
-              score: reviewResponse.score
-            }
-          }
-        });
-
-        return { review, job };
-      });
+      const result = await reviewJobForUser({ jobId: req.params.id, userId });
 
       res.status(201).json({
         review: serializeAiReview(result.review),
         job: serializeJob(result.job),
-        automationRun: {
-          id: run.id,
-          status: "succeeded"
-        }
+        automationRun: result.automationRun
       });
     } catch (error) {
-      const message = errorMessage(error);
-      await markRunFailed(run.id, message);
+      if (error instanceof HttpError) {
+        throw error;
+      }
 
       res.status(502).json({
         error: {
           message: "AI review failed",
           statusCode: 502,
-          runId: run.id,
-          detail: message
+          detail: error instanceof Error ? error.message : "Unknown error"
         }
       });
     }

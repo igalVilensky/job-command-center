@@ -34,6 +34,7 @@ It is not intended to be a hosted SaaS where the maintainer pays for other peopl
 8. Groq provider.
 9. Automation run logs.
 10. Optional manual Gmail import and clear docs for later Google Sheets, n8n, Make, and Ollama connectors.
+11. Backend-driven job-alert processing session with sequential AI review delay for provider limits.
 
 ## Tech stack
 
@@ -62,15 +63,17 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, an optional Groq provider adapter, simulated email imports, and manual Gmail OAuth import:
+The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, an optional Groq provider adapter, simulated email imports, manual Gmail OAuth import, and an in-process job-alert processing session:
 
 - `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, Gmail/imports, job inbox, and AI review views.
-- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job/import/Gmail routes, and authenticated AI orchestration routes.
+- `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job/import/Gmail/processing routes, and authenticated AI orchestration routes.
 - `apps/ai-service`: FastAPI service on port 8001 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
 - `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `ImportedEmail`, `EmailAccount`, `AiReview`, and `AutomationRun`.
 
-Gemini/Ollama/OpenAI providers, Gmail background polling, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
+The job-alert processing session is stored in memory inside the API process. It continues if the browser tab closes, but it does not survive API server restart in the MVP.
+
+Gemini/Ollama/OpenAI providers, scheduled Gmail polling, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
 ## Local setup
 
@@ -230,6 +233,23 @@ curl -i -b /tmp/jobcc-cookies.txt \
 curl -i -b /tmp/jobcc-cookies.txt \
   -X POST http://127.0.0.1:4000/gmail/disconnect
 ```
+
+Job-alert processing session checks:
+
+```bash
+curl -i -b /tmp/jobcc-cookies.txt \
+  -H "Content-Type: application/json" \
+  -d '{"gmailQuery":"label:jobAlerts newer_than:30d","maxResults":10,"reviewDelaySeconds":5}' \
+  http://127.0.0.1:4000/processing/job-alert-session/start
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  http://127.0.0.1:4000/processing/job-alert-session/current
+
+curl -i -b /tmp/jobcc-cookies.txt \
+  -X POST http://127.0.0.1:4000/processing/job-alert-session/cancel
+```
+
+The processing session imports Gmail job alerts, extracts active imported emails, moves processed/hidden/likely irrelevant emails out of the active import inbox, and reviews eligible full-description jobs one by one with the configured delay.
 
 Profile checks:
 

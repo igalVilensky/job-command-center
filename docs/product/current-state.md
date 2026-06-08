@@ -140,10 +140,15 @@ Milestone 01 project skeleton has been created.
 - The LLM remains responsible for semantic job extraction; there is no provider-specific or StepStone-specific job parser.
 - Zero-job extraction is valid, marks the imported email extraction as succeeded, and can return warnings for low-confidence sources.
 - Re-running extraction for the same imported email skips duplicate jobs by normalized company/title and keeps the linked job count accurate.
+- Imported emails now have an inbox lifecycle separate from extraction status: `active`, `processed`, `hidden`, `likely_irrelevant`, and `needs_check`.
+- Successful extraction with at least one linked job marks the imported email `processed`; zero-job extraction marks it `needs_check` unless deterministic pre-classification says `likely_irrelevant`.
+- Hidden, processed, and likely irrelevant emails stay accessible but no longer dominate the active import inbox.
+- Imported emails store a deterministic triage reason based on subject, snippet, and body preview keywords. This is not AI classification.
 - The web app surfaces safe backend error details for extraction failures.
 - `apps/web` has an `Imports` inbox for processing imported job-alert emails into jobs.
-- The Imports inbox filters imported emails client-side by all, not extracted, extracted, failed, and has jobs, with counts for each filter.
+- The Imports inbox filters imported emails client-side by active, needs check, failed, processed, hidden/irrelevant, and all, with counts for each filter.
 - The Imports inbox has a deterministic `Process next` workflow that selects the first not-yet-extracted email and focuses its detail panel without auto-extracting.
+- Imported email cards expose lifecycle actions such as hide, restore/keep active, mark likely irrelevant, and extract anyway.
 - Email account Prisma models exist for Gmail OAuth connections.
 - Gmail OAuth tokens are stored through an encryption helper backed by `EMAIL_TOKEN_ENCRYPTION_KEY`.
 - Authenticated Gmail routes exist:
@@ -157,6 +162,16 @@ Milestone 01 project skeleton has been created.
 - Manual Gmail import uses stored Gmail OAuth credentials to fetch recent messages, deduplicates them into `ImportedEmail`, and does not automatically extract jobs.
 - The `Imports` view includes compact Gmail connection status, connect/disconnect actions, manual Gmail import controls, simulated import, paste extraction, the imported email inbox, and explicit email extraction.
 - Gmail connection state is clearer in the web app: disconnected users see a single connect action and helper text, while connected users see account details, last import, a disconnect action, and the Gmail import form.
+- Milestone 19 adds a backend-driven job-alert processing session:
+  - `POST /processing/job-alert-session/start`
+  - `GET /processing/job-alert-session/current`
+  - `POST /processing/job-alert-session/cancel`
+- A processing session imports recent Gmail job-alert emails, classifies active imported emails with deterministic keyword rules, extracts jobs from candidate/maybe/needs-check emails, hides likely irrelevant emails from the active inbox, and marks emails processed when jobs exist.
+- The session builds an AI review queue only for eligible newly created jobs with `sourceQuality=full_description`, saved `JobDescription.fullText`, no archive date, and no latest review or status `ready_for_analysis`.
+- AI reviews run sequentially with a configurable delay between jobs. The default delay is 60 seconds, and lower values such as 5 seconds can be used for local testing.
+- The session runs inside the API process, so it continues if the browser tab is closed and can be inspected again while the API server is still running.
+- MVP limitation: the processing session is in memory and does not survive API server restart. There is no Redis, BullMQ, Celery, browser extension, scraping, cover-letter generation, or auto-apply flow.
+- Dashboard and Imports now show a Job Alert Processing panel with session progress, queue counts, review delay/next-review timing, errors, warnings, cancel, and summary actions.
 - Milestone 15 adds a calmer frontend visual design system with warmer neutral backgrounds, softer surfaces, softer borders, rounded controls, and quieter destructive actions.
 - Status display now uses semantic badge tones for neutral, info, success, warning, danger, accent, and muted states instead of same-looking grey tags.
 - Import, extraction, source quality, job status, next action, AI decision, and fit verdict states now map consistently to meaningful status colors.

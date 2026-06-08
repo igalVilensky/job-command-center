@@ -1,6 +1,12 @@
+import { type FormEvent } from "react";
+
 import {
+  type JobAlertProcessingFormState,
+  type JobAlertProcessingSession,
+  type ImportedEmail,
   type Job,
   type QueueFilter,
+  type User,
   jobIsStrongMatch,
   jobNeedsClarification,
   jobNeedsPipelineFollowUp,
@@ -8,10 +14,21 @@ import {
   queueFilterLabels,
   sourceNeedsFullDescription
 } from "./types";
+import { JobAlertProcessingPanel } from "./JobAlertProcessingPanel";
 
 type DashboardPanelProps = {
+  importedEmails: ImportedEmail[];
   jobs: Job[];
+  processingForm: JobAlertProcessingFormState;
+  processingSession: JobAlertProcessingSession | null;
+  user: User | null;
+  isBusy: boolean;
+  onCancelProcessingSession: () => void;
+  onOpenImports: () => void;
   onOpenJobsFilter: (filter: QueueFilter) => void;
+  onRefreshProcessingSession: () => void | Promise<unknown>;
+  onStartProcessingSession: (event: FormEvent<HTMLFormElement>) => void;
+  updateProcessingField: (field: keyof JobAlertProcessingFormState, value: string) => void;
 };
 
 type DashboardCard = {
@@ -22,12 +39,43 @@ type DashboardCard = {
   tone: "warning" | "accent" | "success" | "info" | "neutral";
 };
 
-export function DashboardPanel({ jobs, onOpenJobsFilter }: DashboardPanelProps) {
+const importedEmailIsActive = (email: ImportedEmail) =>
+  email.extractionStatus === "failed" ||
+  email.inboxStatus === "active" ||
+  email.inboxStatus === "needs_check";
+
+export function DashboardPanel({
+  importedEmails,
+  jobs,
+  processingForm,
+  processingSession,
+  user,
+  isBusy,
+  onCancelProcessingSession,
+  onOpenImports,
+  onOpenJobsFilter,
+  onRefreshProcessingSession,
+  onStartProcessingSession,
+  updateProcessingField
+}: DashboardPanelProps) {
   const needsDescription = jobs.filter(sourceNeedsFullDescription).length;
   const readyForReview = jobs.filter(jobNeedsReview).length;
   const strongMatches = jobs.filter(jobIsStrongMatch).length;
   const maybeClarify = jobs.filter(jobNeedsClarification).length;
   const followUps = jobs.filter(jobNeedsPipelineFollowUp).length;
+  const activeImportedEmails = importedEmails.filter(importedEmailIsActive).length;
+  const needsCheckEmails = importedEmails.filter((email) => email.inboxStatus === "needs_check").length;
+  const reviewedThisSession = processingSession?.reviewsCompletedCount ?? 0;
+  const nextBestAction =
+    activeImportedEmails > 0
+      ? "Process active imported emails"
+      : needsDescription > 0
+        ? "Paste full descriptions"
+        : readyForReview > 0
+          ? "Review ready jobs"
+          : strongMatches > 0
+            ? "Decide on strong matches"
+            : "Inbox is clear";
 
   const cards: DashboardCard[] = [
     {
@@ -89,6 +137,50 @@ export function DashboardPanel({ jobs, onOpenJobsFilter }: DashboardPanelProps) 
           <p className="muted">Active work, grouped by what needs attention next.</p>
         </div>
       </div>
+
+      <JobAlertProcessingPanel
+        form={processingForm}
+        isBusy={isBusy}
+        onCancel={onCancelProcessingSession}
+        onOpenImports={onOpenImports}
+        onOpenJobsFilter={onOpenJobsFilter}
+        onRefresh={onRefreshProcessingSession}
+        onStart={onStartProcessingSession}
+        session={processingSession}
+        updateField={updateProcessingField}
+        user={user}
+      />
+
+      <section className="dashboard-snapshot" aria-label="Intake snapshot">
+        <div>
+          <span>Active imported emails</span>
+          <strong>{activeImportedEmails}</strong>
+        </div>
+        <div>
+          <span>Needs check</span>
+          <strong>{needsCheckEmails}</strong>
+        </div>
+        <div>
+          <span>Latest session jobs</span>
+          <strong>{processingSession?.jobsCreatedCount ?? 0}</strong>
+        </div>
+        <div>
+          <span>Ready for review</span>
+          <strong>{readyForReview}</strong>
+        </div>
+        <div>
+          <span>Need full description</span>
+          <strong>{needsDescription}</strong>
+        </div>
+        <div>
+          <span>Reviewed this session</span>
+          <strong>{reviewedThisSession}</strong>
+        </div>
+        <div className="snapshot-wide">
+          <span>Next best action</span>
+          <strong>{nextBestAction}</strong>
+        </div>
+      </section>
 
       <div className="dashboard-grid">
         {cards.map((card) => (

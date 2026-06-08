@@ -16,6 +16,41 @@ const simulateFields = new Set([
 
 const importStatuses = new Set(["imported"]);
 const extractionStatuses = new Set(["not_started", "succeeded", "failed"]);
+const inboxStatuses = new Set([
+  "active",
+  "processed",
+  "hidden",
+  "likely_irrelevant",
+  "needs_check"
+]);
+const importEmailScopes = new Set([
+  "active",
+  "history",
+  "processed",
+  "hidden",
+  "irrelevant",
+  "needs_check",
+  "failed",
+  "all"
+]);
+const triageFields = new Set(["inboxStatus", "triageReason"]);
+
+export type ImportedEmailInboxStatus =
+  | "active"
+  | "processed"
+  | "hidden"
+  | "likely_irrelevant"
+  | "needs_check";
+
+export type ImportedEmailScope =
+  | "active"
+  | "history"
+  | "processed"
+  | "hidden"
+  | "irrelevant"
+  | "needs_check"
+  | "failed"
+  | "all";
 
 type ImportedEmailWithCount = ImportedEmail & {
   _count?: {
@@ -34,6 +69,11 @@ export type ImportedEmailSimulateInput = {
   snippet?: string | null;
   bodyText: string;
   rawMetadataJson?: unknown;
+};
+
+export type ImportedEmailTriageInput = {
+  inboxStatus: ImportedEmailInboxStatus;
+  triageReason?: string | null;
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -165,12 +205,55 @@ export const validateExtractionStatusFilter = (value: unknown) => {
   return value;
 };
 
+export const validateImportedEmailScope = (value: unknown): ImportedEmailScope => {
+  if (value === undefined || value === "") {
+    return "active";
+  }
+
+  if (typeof value !== "string" || !importEmailScopes.has(value)) {
+    throw new HttpError(400, "scope is not supported");
+  }
+
+  return value as ImportedEmailScope;
+};
+
+export const validateInboxStatusFilter = (value: unknown) => {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !inboxStatuses.has(value)) {
+    throw new HttpError(400, "inboxStatus is not supported");
+  }
+
+  return value as ImportedEmailInboxStatus;
+};
+
+export const validateImportedEmailTriage = (body: unknown): ImportedEmailTriageInput => {
+  if (!isPlainObject(body)) {
+    throw new HttpError(400, "Request body must be an object");
+  }
+
+  rejectUnknownFields(body, triageFields);
+
+  if (typeof body.inboxStatus !== "string" || !inboxStatuses.has(body.inboxStatus)) {
+    throw new HttpError(400, "inboxStatus is not supported");
+  }
+
+  return {
+    inboxStatus: body.inboxStatus as ImportedEmailInboxStatus,
+    triageReason: optionalString(body.triageReason, "triageReason", 1000)
+  };
+};
+
 export const serializeImportedEmail = (email: ImportedEmailWithCount) => {
   const { _count, ...emailWithoutCount } = email;
 
   return {
     ...emailWithoutCount,
     receivedAt: email.receivedAt?.toISOString() ?? null,
+    processedAt: email.processedAt?.toISOString() ?? null,
+    hiddenAt: email.hiddenAt?.toISOString() ?? null,
     createdAt: email.createdAt.toISOString(),
     updatedAt: email.updatedAt.toISOString(),
     jobCount: _count?.jobs ?? email.jobCount

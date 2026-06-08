@@ -9,6 +9,7 @@ import { gmailRouter } from "./routes/gmail";
 import { healthRouter } from "./routes/health";
 import { importsRouter } from "./routes/imports";
 import { jobsRouter } from "./routes/jobs";
+import { processingRouter } from "./routes/processing";
 import { profileRouter } from "./routes/profile";
 
 export const app = express();
@@ -29,6 +30,7 @@ app.use("/ai", aiRouter);
 app.use("/gmail", gmailRouter);
 app.use("/imports", importsRouter);
 app.use("/jobs", jobsRouter);
+app.use("/processing", processingRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

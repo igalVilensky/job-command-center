@@ -18,6 +18,7 @@ import {
 } from "../lib/gmail-client";
 import { validateGmailRecentImport } from "../lib/gmail-validation";
 import { HttpError } from "../lib/http-error";
+import { classifyImportedEmail } from "../lib/imported-email-classification";
 import { serializeImportedEmail } from "../lib/import-validation";
 import { prisma } from "../lib/prisma";
 import {
@@ -276,6 +277,7 @@ const createImportedEmailFromGmail = async (
   userId: string,
   message: ReturnType<typeof gmailMessageToImportedEmail>
 ) => {
+  const classification = classifyImportedEmail(message);
   const existing = await prisma.importedEmail.findUnique({
     where: {
       userId_provider_providerMessageId: {
@@ -313,6 +315,7 @@ const createImportedEmailFromGmail = async (
       sourceLabel: message.sourceLabel,
       snippet: message.snippet,
       bodyText: message.bodyText,
+      triageReason: classification.reason,
       rawMetadataJson: message.rawMetadataJson as Prisma.InputJsonValue
     },
     include: {
@@ -431,60 +434,69 @@ gmailRouter.post(
   })
 );
 
+export const importRecentGmailEmailsForUser = async (
+  userId: string,
+  input: ReturnType<typeof validateGmailRecentImport>
+) => {
+  const connectedAccount = await findConnectedGmailAccount(userId);
+  assertGmailConfigured();
+
+  const { account, accessToken } = await gmailAccessToken(connectedAccount);
+  const emails = [];
+  let imported = 0;
+  let duplicates = 0;
+
+  try {
+    const messageSummaries = await listGmailMessages(accessToken, input.query, input.maxResults);
+
+    for (const summary of messageSummaries) {
+      const gmailMessage = await getGmailMessage(accessToken, summary.id);
+      const importedMessage = gmailMessageToImportedEmail(gmailMessage);
+      const result = await createImportedEmailFromGmail(userId, importedMessage);
+
+      if (result.duplicate) {
+        duplicates += 1;
+      } else {
+        imported += 1;
+      }
+
+      emails.push(serializeImportedEmail(result.email));
+    }
+  } catch (error) {
+    if (isInsufficientScopeError(error)) {
+      await disconnectGmailAccount(account.id);
+      throw new HttpError(
+        400,
+        "Gmail connection is missing read permission. Reconnect Gmail and approve Gmail read access."
+      );
+    }
+
+    throw error;
+  }
+
+  await prisma.emailAccount.update({
+    where: { id: account.id },
+    data: {
+      lastSyncAt: new Date()
+    }
+  });
+
+  return {
+    imported,
+    duplicates,
+    emails,
+    query: input.query
+  };
+};
+
 gmailRouter.post(
   "/import/recent",
   requireAuth,
   asyncHandler(async (req, res) => {
     const userId = getUserId(req as AuthenticatedRequest);
     const input = validateGmailRecentImport(req.body);
-    const connectedAccount = await findConnectedGmailAccount(userId);
-    assertGmailConfigured();
+    const result = await importRecentGmailEmailsForUser(userId, input);
 
-    const { account, accessToken } = await gmailAccessToken(connectedAccount);
-    const emails = [];
-    let imported = 0;
-    let duplicates = 0;
-
-    try {
-      const messageSummaries = await listGmailMessages(accessToken, input.query, input.maxResults);
-
-      for (const summary of messageSummaries) {
-        const gmailMessage = await getGmailMessage(accessToken, summary.id);
-        const importedMessage = gmailMessageToImportedEmail(gmailMessage);
-        const result = await createImportedEmailFromGmail(userId, importedMessage);
-
-        if (result.duplicate) {
-          duplicates += 1;
-        } else {
-          imported += 1;
-        }
-
-        emails.push(serializeImportedEmail(result.email));
-      }
-    } catch (error) {
-      if (isInsufficientScopeError(error)) {
-        await disconnectGmailAccount(account.id);
-        throw new HttpError(
-          400,
-          "Gmail connection is missing read permission. Reconnect Gmail and approve Gmail read access."
-        );
-      }
-
-      throw error;
-    }
-
-    await prisma.emailAccount.update({
-      where: { id: account.id },
-      data: {
-        lastSyncAt: new Date()
-      }
-    });
-
-    res.status(200).json({
-      imported,
-      duplicates,
-      emails,
-      query: input.query
-    });
+    res.status(200).json(result);
   })
 );

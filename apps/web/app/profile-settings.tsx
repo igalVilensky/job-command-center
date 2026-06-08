@@ -21,6 +21,8 @@ import {
   type ImportFormState,
   type ImportedEmail,
   type ImportedEmailFormState,
+  type JobAlertProcessingFormState,
+  type JobAlertProcessingSession,
   type Job,
   type JobDetailTab,
   type JobEnrichmentFormState,
@@ -33,6 +35,7 @@ import {
   type User,
   cvToForm,
   defaultGmailImportForm,
+  defaultJobAlertProcessingForm,
   defaultJobDetailTab,
   emptyCvForm,
   emptyImportedEmailForm,
@@ -91,6 +94,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     useState<ImportedEmailFormState>(emptyImportedEmailForm);
   const [gmailImportForm, setGmailImportForm] =
     useState<GmailImportFormState>(defaultGmailImportForm);
+  const [processingForm, setProcessingForm] =
+    useState<JobAlertProcessingFormState>(defaultJobAlertProcessingForm);
   const [pipelineForm, setPipelineForm] = useState<PipelineFormState>(emptyPipelineForm);
   const [extractedJobs, setExtractedJobs] = useState<Job[]>([]);
   const [importedEmailExtractedJobs, setImportedEmailExtractedJobs] = useState<Job[]>([]);
@@ -103,6 +108,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   const [importedEmails, setImportedEmails] = useState<ImportedEmail[]>([]);
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
   const [gmailImportResult, setGmailImportResult] = useState<GmailImportResult | null>(null);
+  const [processingSession, setProcessingSession] =
+    useState<JobAlertProcessingSession | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [jobDetailTab, setJobDetailTab] = useState<JobDetailTab>("overview");
   const [selectedImportedEmail, setSelectedImportedEmail] = useState<ImportedEmail | null>(null);
@@ -151,9 +158,17 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   };
 
   const loadImportedEmails = async () => {
-    const data = await request<{ emails: ImportedEmail[] }>("/imports/emails");
+    const data = await request<{ emails: ImportedEmail[] }>("/imports/emails?scope=all");
     setImportedEmails(data.emails);
     return data.emails;
+  };
+
+  const loadProcessingSession = async () => {
+    const data = await request<{ session: JobAlertProcessingSession }>(
+      "/processing/job-alert-session/current"
+    );
+    setProcessingSession(data.session);
+    return data.session;
   };
 
   const loadGmailStatus = async () => {
@@ -214,7 +229,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           loadCandidateCv(),
           loadJobs(),
           loadImportedEmails(),
-          loadGmailStatus()
+          loadGmailStatus(),
+          loadProcessingSession()
         ]);
       } catch {
         setUser(null);
@@ -251,6 +267,19 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
   }, []);
 
   useEffect(() => {
+    if (!user || processingSession?.status !== "running") {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      void Promise.all([loadProcessingSession(), loadImportedEmails(), loadJobs()]);
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, processingSession?.status]);
+
+  useEffect(() => {
     setPipelineForm(selectedJob ? jobToPipelineForm(selectedJob) : emptyPipelineForm);
     setEnrichmentForm(jobToEnrichmentForm(selectedJob));
   }, [selectedJob]);
@@ -273,7 +302,8 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
         loadCandidateCv(),
         loadJobs(),
         loadImportedEmails(),
-        loadGmailStatus()
+        loadGmailStatus(),
+        loadProcessingSession()
       ]);
       setActiveView("dashboard");
       setStatus("Signed in");
@@ -559,6 +589,87 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     }
   };
 
+  const handleStartProcessingSession = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    const maxResults = Number(processingForm.maxResults);
+    const reviewDelaySeconds = Number(processingForm.reviewDelaySeconds);
+
+    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 25) {
+      setError("Max results must be an integer between 1 and 25");
+      setIsBusy(false);
+      return;
+    }
+
+    if (
+      !Number.isInteger(reviewDelaySeconds) ||
+      reviewDelaySeconds < 0 ||
+      reviewDelaySeconds > 3600
+    ) {
+      setError("Review delay seconds must be an integer between 0 and 3600");
+      setIsBusy(false);
+      return;
+    }
+
+    try {
+      const data = await request<{ session: JobAlertProcessingSession }>(
+        "/processing/job-alert-session/start",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            gmailQuery: processingForm.gmailQuery || null,
+            maxResults,
+            reviewDelaySeconds
+          })
+        }
+      );
+
+      setProcessingSession(data.session);
+      setStatus("Job-alert processing session started");
+    } catch (startError) {
+      setError(startError instanceof Error ? startError.message : "Processing session failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleRefreshProcessingSession = async () => {
+    setError("");
+
+    try {
+      await Promise.all([loadProcessingSession(), loadImportedEmails(), loadJobs()]);
+      setStatus("Processing session refreshed");
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Session refresh failed");
+    }
+  };
+
+  const handleCancelProcessingSession = async () => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ session: JobAlertProcessingSession }>(
+        "/processing/job-alert-session/cancel",
+        {
+          method: "POST"
+        }
+      );
+
+      setProcessingSession(data.session);
+      await Promise.all([loadImportedEmails(), loadJobs()]);
+      setStatus("Processing session cancelled");
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "Session cancel failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleExtractImportedEmail = async (id: string) => {
     setIsBusy(true);
     setError("");
@@ -592,6 +703,34 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       );
     } catch (extractError) {
       setError(extractError instanceof Error ? extractError.message : "Email extraction failed");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleTriageImportedEmail = async (
+    id: string,
+    inboxStatus: string,
+    triageReason?: string | null
+  ) => {
+    setIsBusy(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const data = await request<{ email: ImportedEmail }>(`/imports/emails/${id}/triage`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          inboxStatus,
+          triageReason: triageReason ?? null
+        })
+      });
+
+      setSelectedImportedEmail((current) => (current?.id === id ? data.email : current));
+      await loadImportedEmails();
+      setStatus("Imported email updated");
+    } catch (triageError) {
+      setError(triageError instanceof Error ? triageError.message : "Email triage failed");
     } finally {
       setIsBusy(false);
     }
@@ -780,6 +919,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setImportedEmails([]);
       setGmailStatus(null);
       setGmailImportResult(null);
+      setProcessingSession(null);
       setSelectedJob(null);
       setJobDetailTab("overview");
       setSelectedImportedEmail(null);
@@ -794,6 +934,7 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       setImportForm(emptyImportForm);
       setImportedEmailForm(emptyImportedEmailForm);
       setGmailImportForm(defaultGmailImportForm);
+      setProcessingForm(defaultJobAlertProcessingForm);
       setPipelineForm(emptyPipelineForm);
       setActiveView("dashboard");
       setQueueFilter("all");
@@ -865,6 +1006,13 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
 
   const updateGmailImportField = (field: keyof GmailImportFormState, value: string) => {
     setGmailImportForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const updateProcessingField = (field: keyof JobAlertProcessingFormState, value: string) => {
+    setProcessingForm((current) => ({
       ...current,
       [field]: value
     }));
@@ -951,7 +1099,20 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
       user={user}
     >
       {activeView === "dashboard" ? (
-        <DashboardPanel jobs={jobs} onOpenJobsFilter={openJobsWithFilter} />
+        <DashboardPanel
+          importedEmails={importedEmails}
+          isBusy={isBusy}
+          jobs={jobs}
+          onCancelProcessingSession={() => void handleCancelProcessingSession()}
+          onOpenImports={() => navigateToView("imports")}
+          onOpenJobsFilter={openJobsWithFilter}
+          onRefreshProcessingSession={() => void handleRefreshProcessingSession()}
+          onStartProcessingSession={handleStartProcessingSession}
+          processingForm={processingForm}
+          processingSession={processingSession}
+          updateProcessingField={updateProcessingField}
+          user={user}
+        />
       ) : activeView === "profile" ? (
         <CandidateProfilePanel
           activeCv={activeCv}
@@ -982,19 +1143,30 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           importedEmails={importedEmails}
           isBusy={isBusy}
           jobs={jobs}
+          onCancelProcessingSession={() => void handleCancelProcessingSession()}
           onDisconnectGmail={() => void handleDisconnectGmail()}
           onExtractImportedEmail={(id) => void handleExtractImportedEmail(id)}
           onExtractJobs={handleExtractJobs}
           onImportFromGmail={handleImportFromGmail}
+          onOpenImports={() => navigateToView("imports")}
           onOpenJob={openJob}
+          onOpenJobsFilter={openJobsWithFilter}
+          onRefreshProcessingSession={() => void handleRefreshProcessingSession()}
           onRefreshImportedEmails={loadImportedEmails}
           onSelectImportedEmail={selectImportedEmail}
           onSimulateImportedEmail={handleSimulateImportedEmail}
+          onStartProcessingSession={handleStartProcessingSession}
           onStartGmailOAuth={() => void handleStartGmailOAuth()}
+          onTriageImportedEmail={(id, inboxStatus, triageReason) =>
+            void handleTriageImportedEmail(id, inboxStatus, triageReason)
+          }
+          processingForm={processingForm}
+          processingSession={processingSession}
           selectedImportedEmail={selectedImportedEmail}
           updateGmailImportField={updateGmailImportField}
           updateImportField={updateImportField}
           updateImportedEmailField={updateImportedEmailField}
+          updateProcessingField={updateProcessingField}
           user={user}
         />
       ) : (

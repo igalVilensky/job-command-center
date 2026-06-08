@@ -119,6 +119,10 @@ export type ImportedEmail = {
   bodyText: string | null;
   importStatus: string;
   extractionStatus: string;
+  inboxStatus: string;
+  processedAt: string | null;
+  hiddenAt: string | null;
+  triageReason: string | null;
   jobCount: number;
   errorMessage: string | null;
   createdAt: string;
@@ -204,6 +208,47 @@ export type ImportedEmailFormState = {
 export type GmailImportFormState = {
   query: string;
   maxResults: string;
+};
+
+export type JobAlertReviewQueueItem = {
+  jobId: string;
+  status: "queued" | "running" | "completed" | "failed" | "skipped";
+  company: string;
+  title: string;
+  errorMessage: string | null;
+};
+
+export type JobAlertProcessingSession = {
+  id: string;
+  userId: string;
+  status: "idle" | "running" | "completed" | "failed" | "cancelled";
+  startedAt: string | null;
+  completedAt: string | null;
+  currentStep: string;
+  importedCount: number;
+  duplicateCount: number;
+  emailsToExtractCount: number;
+  extractedEmailsCount: number;
+  failedEmailsCount: number;
+  jobsCreatedCount: number;
+  jobsReadyForReviewCount: number;
+  jobsNeedingFullDescriptionCount: number;
+  jobsLikelyIrrelevantCount: number;
+  reviewQueue: JobAlertReviewQueueItem[];
+  reviewDelaySeconds: number;
+  currentReviewJobId: string | null;
+  nextReviewAt: string | null;
+  reviewsCompletedCount: number;
+  reviewsFailedCount: number;
+  errors: string[];
+  warnings: string[];
+  createdJobIds: string[];
+};
+
+export type JobAlertProcessingFormState = {
+  gmailQuery: string;
+  maxResults: string;
+  reviewDelaySeconds: string;
 };
 
 export type PipelineFormState = {
@@ -369,6 +414,12 @@ export const emptyImportedEmailForm: ImportedEmailFormState = {
 export const defaultGmailImportForm: GmailImportFormState = {
   query: "label:jobAlerts newer_than:30d",
   maxResults: "10"
+};
+
+export const defaultJobAlertProcessingForm: JobAlertProcessingFormState = {
+  gmailQuery: "label:jobAlerts newer_than:30d",
+  maxResults: "10",
+  reviewDelaySeconds: "60"
 };
 
 export const emptyPipelineForm: PipelineFormState = {

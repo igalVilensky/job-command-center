@@ -111,10 +111,18 @@ Manual enrichment uses the existing `url`, `source_quality`, and `status` fields
 - raw_metadata_json
 - import_status
 - extraction_status
+- inbox_status
+- processed_at
+- hidden_at
+- triage_reason
 - job_count
 - error_message
 - created_at
 - updated_at
+
+`inbox_status` controls whether an imported email appears in the active import inbox. Supported MVP values are `active`, `processed`, `hidden`, `likely_irrelevant`, and `needs_check`. This is separate from `extraction_status`, because an email can be extracted but still need manual checking, or processed and no longer useful in the active inbox.
+
+`triage_reason` stores deterministic keyword classification or user triage notes. It is not an AI-review field.
 
 ## EmailAccount
 
@@ -202,3 +210,11 @@ Manual enrichment stores the pasted full job description in `full_text`. The cur
 - started_at
 - finished_at
 - metadata_json
+
+## In-process JobAlertProcessingSession
+
+Milestone 19 adds a backend-driven job-alert processing session, but the session is not a persisted Prisma model in the MVP.
+
+The API process keeps one active in-memory session with progress fields such as import counts, extraction counts, created-job counts, review queue items, current review job, next review time, errors, and warnings. This lets the workflow continue if the browser tab closes, as long as the API server keeps running.
+
+MVP limitation: the in-memory session does not survive API server restart. Historical AI/extraction work is still represented by persisted `AutomationRun`, `ImportedEmail`, `Job`, `JobDescription`, and `AiReview` rows.
