@@ -372,6 +372,8 @@ const loadCandidateEmails = async (
   session: JobAlertProcessingSession,
   importedBatchEmailIds: string[]
 ) => {
+  // If includeBacklog is false, only consider the newly imported emails from this batch.
+  // This explicitly prevents processing of old active backlog items.
   if (!session.includeBacklog && importedBatchEmailIds.length === 0) {
     return [];
   }
@@ -425,6 +427,10 @@ const markOverEmailCap = async (
   emails: ImportedEmail[],
   duplicateEmailIds: Set<string>
 ) => {
+  if (session.maxExtractionsPerRun === 0) {
+    return;
+  }
+
   const paused = emails.slice(session.maxEmailsToProcess);
   const message = "AI extraction paused because max emails to process was reached for this run.";
 
@@ -526,6 +532,12 @@ const runExtractionQueue = async (
         "Needs manual check before AI extraction because the saved source text is too short.",
         prefilter
       );
+      continue;
+    }
+
+    if (session.maxExtractionsPerRun === 0) {
+      item.status = "skipped";
+      item.errorMessage = "Prefilter-only mode: AI extraction skipped.";
       continue;
     }
 
@@ -654,18 +666,30 @@ const buildReviewQueue = async (session: JobAlertProcessingSession) => {
   );
 
   session.jobsReadyForReviewCount = reviewJobs.length;
-  session.reviewQueue = reviewJobs.map((job, index) => ({
-    jobId: job.id,
-    status: index < session.maxReviewsPerRun ? "queued" : "paused",
-    company: job.company,
-    title: job.title,
-    errorMessage:
-      index < session.maxReviewsPerRun
-        ? null
-        : "AI review paused because max reviews for this run were reached."
-  }));
+  session.reviewQueue = reviewJobs.map((job, index) => {
+    if (session.maxReviewsPerRun === 0) {
+      return {
+        jobId: job.id,
+        status: "skipped",
+        company: job.company,
+        title: job.title,
+        errorMessage: "Prefilter-only mode: AI review skipped."
+      };
+    }
 
-  if (reviewJobs.length > session.maxReviewsPerRun) {
+    return {
+      jobId: job.id,
+      status: index < session.maxReviewsPerRun ? "queued" : "paused",
+      company: job.company,
+      title: job.title,
+      errorMessage:
+        index < session.maxReviewsPerRun
+          ? null
+          : "AI review paused because max reviews for this run were reached."
+    };
+  });
+
+  if (session.maxReviewsPerRun > 0 && reviewJobs.length > session.maxReviewsPerRun) {
     session.reviewBudgetStatus = "exhausted_for_run";
     session.warnings.push("AI review paused because max reviews for this run were reached.");
   }

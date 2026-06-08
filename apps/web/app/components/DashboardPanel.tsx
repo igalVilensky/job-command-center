@@ -187,7 +187,7 @@ export function DashboardPanel({
     },
     {
       key: "worth-reviewing",
-      label: "Worth reviewing",
+      label: "Ready for AI review",
       count: readyForReview.length,
       emptyText: "No full-description jobs are waiting for AI review.",
       items: firstItems(readyForReview).map((job) => ({
@@ -217,7 +217,7 @@ export function DashboardPanel({
     },
     {
       key: "manual-check",
-      label: "Needs manual check",
+      label: "Needs manual check (email source or job blocker)",
       count: manualCheckEmails.length + maybeClarify.length,
       emptyText: "No ambiguous email or reviewed job needs a human decision right now.",
       items: [
@@ -254,7 +254,7 @@ export function DashboardPanel({
     },
     {
       key: "extraction-budget",
-      label: "Extraction paused / AI budget",
+      label: "AI extraction paused / AI budget",
       count: extractionPausedEmails.length + (extractionPausedReason ? 1 : 0),
       emptyText: "Extraction budget is available.",
       items: [
@@ -284,7 +284,7 @@ export function DashboardPanel({
     },
     {
       key: "review-budget",
-      label: "Review paused / AI budget",
+      label: "AI review paused / AI budget",
       count: reviewPausedItems.length + (reviewPausedReason ? 1 : 0),
       emptyText: "Review budget is available.",
       items: [
@@ -340,7 +340,7 @@ export function DashboardPanel({
     {
       label: "Duplicates",
       count: duplicateEmails.length,
-      detail: "Duplicate sources did not consume extraction budget."
+      detail: "Duplicate sources did not consume AI budget. Can still be extracted manually from Imports if needed."
     },
     {
       label: "Active import sources",

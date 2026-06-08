@@ -58,6 +58,11 @@ Milestone 20 realigns the core loop around a budget-aware command queue:
 - Low-signal, duplicate, and paused-budget sources get clear states without spending tokens.
 - Provider rate limits pause the relevant queue instead of failing every remaining item.
 - The main screen is the Command Queue, grouped by action.
+- Prefilter-only mode (dry run) is supported by setting max extractions and max reviews to 0, evaluating the batch and keeping items in their prefilter state without consuming AI budget.
+- Duplicate sources do not consume AI budget, and can still be manually extracted if needed.
+
+## Known MVP Limitations
+- The in-process processing session survives browser closes but not API server restarts.
 
 ## Manual Tasks
 

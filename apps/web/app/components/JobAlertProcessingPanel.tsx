@@ -148,6 +148,52 @@ export function JobAlertProcessingPanel({
     [form.maxEmailsToProcess, form.maxExtractionsPerRun, form.maxReviewsPerRun, reviewPaused, session]
   );
 
+  const summaryText = useMemo(() => {
+    if (!session || status === "idle") return null;
+
+    if (session.maxExtractionsPerRun === 0 && session.maxReviewsPerRun === 0) {
+      return "Prefilter-only mode: no AI extraction/review calls were used. Items were evaluated and kept in their prefilter state.";
+    }
+
+    const imported = session.importedCount;
+    const duplicates = session.duplicateCount;
+    const considered = session.emailsConsideredCount;
+    const ignored = session.emailsSkippedPrefilterCount + session.duplicateSourceCount;
+    const extractions = session.extractedEmailsCount;
+    const created = session.jobsCreatedCount;
+    const reviews = session.reviewsCompletedCount;
+
+    let text = `Checked ${imported} Gmail results. `;
+    if (duplicates > 0) text += `${duplicates} were already imported. `;
+    if (considered > 0) {
+      if (ignored > 0) {
+        text += `${ignored} ignored before AI. `;
+      }
+      if (extractions > 0) {
+        text += `Used ${extractions} AI extraction${extractions > 1 ? "s" : ""} to create ${created} job${created !== 1 ? "s" : ""}. `;
+      }
+      if (reviews > 0) {
+        text += `Used ${reviews} AI review${reviews > 1 ? "s" : ""}. `;
+      }
+    } else if (imported > 0 && considered === 0 && !session.includeBacklog) {
+      text += "No new emails to consider. ";
+    }
+
+    if (
+      session.extractionBudgetStatus === "exhausted_for_run" ||
+      session.extractionBudgetStatus === "paused_rate_limit"
+    ) {
+      text += "AI extraction paused because the run budget or rate limit was reached. Increase max extractions or process later. ";
+    } else if (
+      session.reviewBudgetStatus === "exhausted_for_run" ||
+      session.reviewBudgetStatus === "paused_rate_limit"
+    ) {
+      text += "AI review paused because the run budget or rate limit was reached. Increase max reviews or process later. ";
+    }
+
+    return text.trim();
+  }, [session, status]);
+
   useEffect(() => {
     if ((!session?.nextExtractionAt && !session?.nextReviewAt) || status !== "running") {
       return undefined;
@@ -343,20 +389,27 @@ export function JobAlertProcessingPanel({
             ))}
           </dl>
 
-          {session.warnings.length ? (
-            <div className="processing-message message-warning">
+          {summaryText ? (
+            <div className="processing-message message-neutral">
               <h4>Session summary</h4>
+              <p>{summaryText}</p>
+            </div>
+          ) : null}
+
+          {session.warnings.length ? (
+            <details className="inline-disclosure">
+              <summary>Technical warnings ({session.warnings.length})</summary>
               <ul className="compact-list">
                 {session.warnings.slice(0, 3).map((warning) => (
                   <li key={warning}>{warning}</li>
                 ))}
               </ul>
-            </div>
+            </details>
           ) : null}
 
           {session.errors.length ? (
             <details className="inline-disclosure">
-              <summary>Technical errors ({session.errors.length})</summary>
+              <summary>Technical details ({session.errors.length} errors)</summary>
               <ul className="compact-list">
                 {session.errors.map((error) => (
                   <li key={error}>{error}</li>

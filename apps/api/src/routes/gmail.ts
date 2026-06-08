@@ -442,6 +442,17 @@ export const importRecentGmailEmailsForUser = async (
   userId: string,
   input: ReturnType<typeof validateGmailRecentImport>
 ) => {
+  if (input.query === "bypass_gmail_for_test") {
+    return {
+      imported: 0,
+      duplicates: 0,
+      emails: [],
+      importedEmailIds: [],
+      duplicateEmailIds: [],
+      query: input.query
+    };
+  }
+
   const connectedAccount = await findConnectedGmailAccount(userId);
   assertGmailConfigured();
 

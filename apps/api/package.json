@@ -9,7 +9,8 @@
     "lint": "tsc --noEmit",
     "db:generate": "dotenv -e ../../.env -- prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
-    "db:seed": "dotenv -e ../../.env -- ts-node src/scripts/seed.ts"
+    "db:seed": "dotenv -e ../../.env -- ts-node src/scripts/seed.ts",
+    "test:prefilter": "dotenv -e ../../.env -- ts-node src/scripts/test-prefilter.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

@@ -150,6 +150,12 @@ curl http://localhost:8001/health
 
 The API health response includes non-secret AI debugging fields: `aiServiceUrl`, `aiEnabled`, and `nodeEnv`. Restart the API after changing `.env` so those values are reloaded.
 
+To validate the deterministic prefilter logic locally:
+
+```bash
+pnpm --filter @jobcc/api test:prefilter
+```
+
 AI service checks:
 
 ```bash
