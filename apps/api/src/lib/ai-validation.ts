@@ -135,6 +135,14 @@ const aiStringArray = (value: unknown, field: string) => {
   return value.map((item) => item.trim()).filter(Boolean);
 };
 
+const optionalAiStringArray = (value: unknown, field: string) => {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  return aiStringArray(value, field);
+};
+
 const aiNullablePositiveInteger = (value: unknown, field: string) => {
   if (value === null) {
     return null;
@@ -239,7 +247,7 @@ export const validateExtractionResponse = (body: unknown): AiExtractionResponse 
   }
 
   const sourceKind = aiEnum(body.sourceKind, "sourceKind", sourceKinds);
-  const warnings = aiStringArray(body.warnings, "warnings");
+  const warnings = optionalAiStringArray(body.warnings, "warnings");
 
   if (!Array.isArray(body.jobs)) {
     throw new Error("AI response jobs must be an array");

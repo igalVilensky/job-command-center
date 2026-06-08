@@ -1,4 +1,4 @@
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactNode } from "react";
 
 import {
   type JobAlertProcessingFormState,
@@ -7,14 +7,15 @@ import {
   type Job,
   type QueueFilter,
   type User,
+  formatDate,
   jobIsStrongMatch,
   jobNeedsClarification,
   jobNeedsPipelineFollowUp,
   jobNeedsReview,
-  queueFilterLabels,
   sourceNeedsFullDescription
 } from "./types";
 import { JobAlertProcessingPanel } from "./JobAlertProcessingPanel";
+import { BadgeRow, StatusBadge, type BadgeTone } from "./StatusBadge";
 
 type DashboardPanelProps = {
   importedEmails: ImportedEmail[];
@@ -25,24 +26,102 @@ type DashboardPanelProps = {
   isBusy: boolean;
   onCancelProcessingSession: () => void;
   onOpenImports: () => void;
+  onOpenJob: (job: Job) => void;
   onOpenJobsFilter: (filter: QueueFilter) => void;
+  onOpenProfile: () => void;
   onRefreshProcessingSession: () => void | Promise<unknown>;
   onStartProcessingSession: (event: FormEvent<HTMLFormElement>) => void;
   updateProcessingField: (field: keyof JobAlertProcessingFormState, value: string) => void;
 };
 
-type DashboardCard = {
-  filter: QueueFilter;
+type CommandItem = {
+  id: string;
+  title: string;
+  reason: string;
+  nextAction: string;
+  actionLabel: string;
+  tone: BadgeTone;
+  onPrimary: () => void;
+  meta?: ReactNode;
+};
+
+type CommandSection = {
+  key: string;
   label: string;
-  value: number;
-  helper: string;
-  tone: "warning" | "accent" | "success" | "info" | "neutral";
+  count: number;
+  emptyText?: string;
+  items: CommandItem[];
 };
 
 const importedEmailIsActive = (email: ImportedEmail) =>
   email.extractionStatus === "failed" ||
+  email.extractionStatus === "needs_manual_check" ||
+  email.extractionStatus === "extraction_paused_budget" ||
   email.inboxStatus === "active" ||
   email.inboxStatus === "needs_check";
+
+const emailReason = (email: ImportedEmail) =>
+  email.prefilterJson?.reason ?? email.triageReason ?? "No prefilter reason saved.";
+
+const reviewScore = (job: Job) =>
+  typeof job.latestAiReview?.score === "number" ? job.latestAiReview.score : null;
+
+const jobLabel = (job: Job) => `${job.title} — ${job.company}`;
+
+const firstItems = <T,>(items: T[], count = 4) => items.slice(0, count);
+
+const pausedBudgetReason = (session: JobAlertProcessingSession | null, kind: "extraction" | "review") => {
+  if (!session) {
+    return null;
+  }
+
+  const status = kind === "extraction" ? session.extractionBudgetStatus : session.reviewBudgetStatus;
+
+  if (status === "paused_rate_limit") {
+    return `AI ${kind} paused because provider rate limit was reached.`;
+  }
+
+  if (status === "exhausted_for_run") {
+    return `AI ${kind} exhausted for this run.`;
+  }
+
+  return null;
+};
+
+const CommandSectionView = ({ section }: { section: CommandSection }) => (
+  <section className="command-section" aria-label={section.label}>
+    <div className="queue-group-heading">
+      <div>
+        <h3>{section.label}</h3>
+      </div>
+      <span className="queue-count">{section.count}</span>
+    </div>
+
+    {section.items.length === 0 ? (
+      <p className="muted command-empty">{section.emptyText ?? "Nothing needs attention here."}</p>
+    ) : (
+      <ul className="command-list">
+        {section.items.map((item) => (
+          <li key={item.id}>
+            <article className={`command-item command-${item.tone}`}>
+              <div className="command-item-main">
+                <div className="command-item-title">
+                  <strong>{item.title}</strong>
+                  <StatusBadge label={item.nextAction} tone={item.tone} />
+                </div>
+                <p>{item.reason}</p>
+                {item.meta ? <div className="command-meta">{item.meta}</div> : null}
+              </div>
+              <button className="button-small" type="button" onClick={item.onPrimary}>
+                {item.actionLabel}
+              </button>
+            </article>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+);
 
 export function DashboardPanel({
   importedEmails,
@@ -53,90 +132,282 @@ export function DashboardPanel({
   isBusy,
   onCancelProcessingSession,
   onOpenImports,
+  onOpenJob,
   onOpenJobsFilter,
+  onOpenProfile,
   onRefreshProcessingSession,
   onStartProcessingSession,
   updateProcessingField
 }: DashboardPanelProps) {
-  const needsDescription = jobs.filter(sourceNeedsFullDescription).length;
-  const readyForReview = jobs.filter(jobNeedsReview).length;
-  const strongMatches = jobs.filter(jobIsStrongMatch).length;
-  const maybeClarify = jobs.filter(jobNeedsClarification).length;
-  const followUps = jobs.filter(jobNeedsPipelineFollowUp).length;
-  const activeImportedEmails = importedEmails.filter(importedEmailIsActive).length;
-  const needsCheckEmails = importedEmails.filter((email) => email.inboxStatus === "needs_check").length;
-  const reviewedThisSession = processingSession?.reviewsCompletedCount ?? 0;
-  const nextBestAction =
-    activeImportedEmails > 0
-      ? "Process active imported emails"
-      : needsDescription > 0
-        ? "Paste full descriptions"
-        : readyForReview > 0
-          ? "Review ready jobs"
-          : strongMatches > 0
-            ? "Decide on strong matches"
-            : "Inbox is clear";
+  const needsDescription = jobs.filter(sourceNeedsFullDescription);
+  const readyForReview = jobs.filter(jobNeedsReview);
+  const strongMatches = jobs.filter(jobIsStrongMatch);
+  const maybeClarify = jobs.filter(jobNeedsClarification);
+  const followUps = jobs.filter(jobNeedsPipelineFollowUp);
+  const manualCheckEmails = importedEmails.filter(
+    (email) =>
+      email.inboxStatus === "needs_check" ||
+      email.extractionStatus === "needs_manual_check" ||
+      email.prefilterDecision === "needs_manual_check"
+  );
+  const extractionPausedEmails = importedEmails.filter(
+    (email) => email.extractionStatus === "extraction_paused_budget"
+  );
+  const ignoredEmails = importedEmails.filter(
+    (email) => email.inboxStatus === "likely_irrelevant" || email.extractionStatus === "ignored_low_signal"
+  );
+  const duplicateEmails = importedEmails.filter((email) => email.extractionStatus === "duplicate_source");
+  const activeImportedEmails = importedEmails.filter(importedEmailIsActive);
+  const extractionPausedReason = pausedBudgetReason(processingSession, "extraction");
+  const reviewPausedReason = pausedBudgetReason(processingSession, "review");
+  const reviewPausedItems = processingSession?.reviewQueue.filter((item) => item.status === "paused") ?? [];
+  const commandSummary = [
+    strongMatches.length ? `${strongMatches.length} apply-ready` : null,
+    readyForReview.length ? `${readyForReview.length} worth reviewing` : null,
+    needsDescription.length ? `${needsDescription.length} need descriptions` : null,
+    manualCheckEmails.length ? `${manualCheckEmails.length} need manual checks` : null,
+    followUps.length ? `${followUps.length} follow-ups due` : null
+  ].filter(Boolean);
 
-  const cards: DashboardCard[] = [
+  const sections: CommandSection[] = [
     {
-      filter: "needs_description",
-      label: queueFilterLabels.needs_description,
-      value: needsDescription,
-      helper: "Paste full descriptions before trusting review output.",
-      tone: "warning"
+      key: "apply-ready",
+      label: "Apply-ready",
+      count: strongMatches.length,
+      emptyText: "No reviewed strong matches are waiting for a decision.",
+      items: firstItems(strongMatches).map((job) => ({
+        id: job.id,
+        title: jobLabel(job),
+        reason: `Strong match${reviewScore(job) !== null ? ` with score ${reviewScore(job)}` : ""}. Next: decide whether to apply.`,
+        nextAction: "Decide/apply",
+        actionLabel: "Open job",
+        tone: "success",
+        onPrimary: () => onOpenJob(job)
+      }))
     },
     {
-      filter: "ready_for_review",
-      label: queueFilterLabels.ready_for_review,
-      value: readyForReview,
-      helper: "Jobs with enough detail for AI scoring.",
-      tone: "accent"
+      key: "worth-reviewing",
+      label: "Worth reviewing",
+      count: readyForReview.length,
+      emptyText: "No full-description jobs are waiting for AI review.",
+      items: firstItems(readyForReview).map((job) => ({
+        id: job.id,
+        title: jobLabel(job),
+        reason: "Full description is available and deterministic triage did not discard it.",
+        nextAction: "AI review",
+        actionLabel: "Review job",
+        tone: "accent",
+        onPrimary: () => onOpenJob(job)
+      }))
     },
     {
-      filter: "apply",
-      label: queueFilterLabels.apply,
-      value: strongMatches,
-      helper: "Reviewed jobs worth a decision.",
-      tone: "success"
+      key: "needs-description",
+      label: "Needs full description",
+      count: needsDescription.length,
+      emptyText: "No jobs are blocked on missing source text.",
+      items: firstItems(needsDescription).map((job) => ({
+        id: job.id,
+        title: jobLabel(job),
+        reason: `Source quality is ${job.sourceQuality.replace(/_/g, " ")}. AI review should wait for the full description.`,
+        nextAction: "Add description",
+        actionLabel: "Add details",
+        tone: "warning",
+        onPrimary: () => onOpenJob(job)
+      }))
     },
     {
-      filter: "maybe",
-      label: queueFilterLabels.maybe,
-      value: maybeClarify,
-      helper: "Jobs with caveats or open questions.",
-      tone: "info"
+      key: "manual-check",
+      label: "Needs manual check",
+      count: manualCheckEmails.length + maybeClarify.length,
+      emptyText: "No ambiguous email or reviewed job needs a human decision right now.",
+      items: [
+        ...firstItems(manualCheckEmails).map((email) => ({
+          id: email.id,
+          title: email.subject || email.providerMessageId,
+          reason: emailReason(email),
+          nextAction: "Manual check",
+          actionLabel: "Open imports",
+          tone: "warning" as const,
+          onPrimary: onOpenImports,
+          meta: (
+            <BadgeRow>
+              <StatusBadge
+                label={email.prefilterDecision ?? email.extractionStatus}
+                tone="warning"
+              />
+              {email.jobLikelihoodScore !== null ? (
+                <StatusBadge label={`Score ${email.jobLikelihoodScore}`} tone="neutral" />
+              ) : null}
+            </BadgeRow>
+          )
+        })),
+        ...firstItems(maybeClarify).map((job) => ({
+          id: job.id,
+          title: jobLabel(job),
+          reason: "AI review or your decision marked this as maybe. Clarify blockers before applying.",
+          nextAction: "Clarify",
+          actionLabel: "Open job",
+          tone: "info" as const,
+          onPrimary: () => onOpenJob(job)
+        }))
+      ].slice(0, 6)
     },
     {
-      filter: "follow_up",
-      label: queueFilterLabels.follow_up,
-      value: followUps,
-      helper: "Pipeline items with next actions or dates.",
-      tone: "accent"
+      key: "extraction-budget",
+      label: "Extraction paused / AI budget",
+      count: extractionPausedEmails.length + (extractionPausedReason ? 1 : 0),
+      emptyText: "Extraction budget is available.",
+      items: [
+        ...(extractionPausedReason
+          ? [
+              {
+                id: "extraction-budget-status",
+                title: "AI extraction budget",
+                reason: `${extractionPausedReason} Next: try again later or lower the run caps.`,
+                nextAction: "Wait/retry",
+                actionLabel: "Refresh",
+                tone: "warning" as const,
+                onPrimary: () => void onRefreshProcessingSession()
+              }
+            ]
+          : []),
+        ...firstItems(extractionPausedEmails).map((email) => ({
+          id: email.id,
+          title: email.subject || email.providerMessageId,
+          reason: email.errorMessage || emailReason(email),
+          nextAction: "Paused",
+          actionLabel: "Open imports",
+          tone: "warning" as const,
+          onPrimary: onOpenImports
+        }))
+      ].slice(0, 5)
     },
     {
-      filter: "all",
-      label: "Total active jobs",
-      value: jobs.length,
-      helper: "Everything currently unarchived.",
-      tone: "neutral"
+      key: "review-budget",
+      label: "Review paused / AI budget",
+      count: reviewPausedItems.length + (reviewPausedReason ? 1 : 0),
+      emptyText: "Review budget is available.",
+      items: [
+        ...(reviewPausedReason
+          ? [
+              {
+                id: "review-budget-status",
+                title: "AI review budget",
+                reason: `${reviewPausedReason} Next: try again later or reduce max AI reviews.`,
+                nextAction: "Wait/retry",
+                actionLabel: "Refresh",
+                tone: "warning" as const,
+                onPrimary: () => void onRefreshProcessingSession()
+              }
+            ]
+          : []),
+        ...firstItems(reviewPausedItems).map((item) => ({
+          id: item.jobId,
+          title: `${item.title} — ${item.company}`,
+          reason: item.errorMessage ?? "AI review paused for this run.",
+          nextAction: "Paused",
+          actionLabel: "Open queue",
+          tone: "warning" as const,
+          onPrimary: () => onOpenJobsFilter("ready_for_review")
+        }))
+      ].slice(0, 5)
+    },
+    {
+      key: "follow-ups",
+      label: "Follow-ups due",
+      count: followUps.length,
+      emptyText: "No pipeline follow-ups are due.",
+      items: firstItems(followUps).map((job) => ({
+        id: job.id,
+        title: jobLabel(job),
+        reason: job.nextAction?.trim()
+          ? job.nextAction
+          : `Follow-up date: ${formatDate(job.followUpDate)}`,
+        nextAction: "Follow up",
+        actionLabel: "Open job",
+        tone: "info",
+        onPrimary: () => onOpenJob(job)
+      }))
     }
   ];
 
-  const nextActions = [
-    { label: "Enrich jobs missing full descriptions", count: needsDescription, filter: "needs_description" },
-    { label: "Review ready jobs", count: readyForReview, filter: "ready_for_review" },
-    { label: "Decide on high-scoring jobs", count: strongMatches, filter: "apply" },
-    { label: "Follow up pipeline items", count: followUps, filter: "follow_up" }
-  ] satisfies { label: string; count: number; filter: QueueFilter }[];
+  const summaryItems = [
+    {
+      label: "Ignored / low signal",
+      count: ignoredEmails.length,
+      detail: "Skipped without AI unless you restore or extract manually."
+    },
+    {
+      label: "Duplicates",
+      count: duplicateEmails.length,
+      detail: "Duplicate sources did not consume extraction budget."
+    },
+    {
+      label: "Active import sources",
+      count: activeImportedEmails.length,
+      detail: "Emails still visible in the source/history view."
+    }
+  ];
 
   return (
-    <section className="dashboard-page" aria-label="Dashboard">
+    <section className="dashboard-page command-page" aria-label="Command Queue">
       <div className="page-title-row">
         <div>
-          <h2>Dashboard</h2>
-          <p className="muted">Active work, grouped by what needs attention next.</p>
+          <h2>Command Queue</h2>
+          <p className="muted">
+            {commandSummary.length > 0
+              ? `Needs attention now: ${commandSummary.join(", ")}.`
+              : "Nothing urgent is waiting. Sync recent job alerts when you want a fresh pass."}
+          </p>
         </div>
+        <button type="button" onClick={() => onOpenJobsFilter("all")}>
+          Open all jobs
+        </button>
       </div>
+
+      <div className="command-section-grid">
+        {sections.map((section) => (
+          <CommandSectionView key={section.key} section={section} />
+        ))}
+      </div>
+
+      <section className="command-section command-summary-section" aria-label="Source summaries">
+        <div className="queue-group-heading">
+          <h3>Ignored / duplicates summary</h3>
+        </div>
+        <div className="command-summary-grid">
+          {summaryItems.map((item) => (
+            <div key={item.label}>
+              <strong>{item.count}</strong>
+              <span>{item.label}</span>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="command-section" aria-label="Manual actions">
+        <div className="queue-group-heading">
+          <h3>Manual actions</h3>
+          <span className="queue-count">1</span>
+        </div>
+        <ul className="command-list">
+          <li>
+            <article className="command-item command-neutral">
+              <div className="command-item-main">
+                <div className="command-item-title">
+                  <strong>Update profile preferences</strong>
+                  <StatusBadge label="Manual" tone="neutral" />
+                </div>
+                <p>Keep role, stack, location, salary, and CV context current before spending review budget.</p>
+              </div>
+              <button className="button-small" type="button" onClick={onOpenProfile}>
+                Open profile
+              </button>
+            </article>
+          </li>
+        </ul>
+      </section>
 
       <JobAlertProcessingPanel
         form={processingForm}
@@ -150,69 +421,6 @@ export function DashboardPanel({
         updateField={updateProcessingField}
         user={user}
       />
-
-      <section className="dashboard-snapshot" aria-label="Intake snapshot">
-        <div>
-          <span>Active imported emails</span>
-          <strong>{activeImportedEmails}</strong>
-        </div>
-        <div>
-          <span>Needs check</span>
-          <strong>{needsCheckEmails}</strong>
-        </div>
-        <div>
-          <span>Latest session jobs</span>
-          <strong>{processingSession?.jobsCreatedCount ?? 0}</strong>
-        </div>
-        <div>
-          <span>Ready for review</span>
-          <strong>{readyForReview}</strong>
-        </div>
-        <div>
-          <span>Need full description</span>
-          <strong>{needsDescription}</strong>
-        </div>
-        <div>
-          <span>Reviewed this session</span>
-          <strong>{reviewedThisSession}</strong>
-        </div>
-        <div className="snapshot-wide">
-          <span>Next best action</span>
-          <strong>{nextBestAction}</strong>
-        </div>
-      </section>
-
-      <div className="dashboard-grid">
-        {cards.map((card) => (
-          <button
-            className={`dashboard-card card-${card.tone}`}
-            key={card.filter}
-            type="button"
-            onClick={() => onOpenJobsFilter(card.filter)}
-          >
-            <span className="dashboard-card-label">{card.label}</span>
-            <strong>{card.value}</strong>
-            <small>{card.helper}</small>
-          </button>
-        ))}
-      </div>
-
-      <section className="next-actions-panel" aria-label="Next best actions">
-        <div className="section-heading">
-          <h3>Next best actions</h3>
-        </div>
-
-        <ul className="action-list">
-          {nextActions.map((action) => (
-            <li key={action.filter}>
-              <button type="button" onClick={() => onOpenJobsFilter(action.filter)}>
-                <span>{action.label}</span>
-                <em>{action.count}</em>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
     </section>
   );
 }

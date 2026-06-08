@@ -1,4 +1,9 @@
-import { callReviewJob, getAiProviderMetadata, REVIEW_PROMPT_VERSION } from "./ai-client";
+import {
+  callReviewJob,
+  getAiProviderMetadata,
+  isAiAuthenticationError,
+  REVIEW_PROMPT_VERSION
+} from "./ai-client";
 import { validateReviewResponse } from "./ai-validation";
 import { HttpError } from "./http-error";
 import { prisma } from "./prisma";
@@ -46,11 +51,7 @@ const markRunFailed = async (runId: string, message: string) => {
 };
 
 export const isGlobalAiReviewError = (error: unknown) => {
-  const message = errorMessage(error);
-
-  return /status=(401|403)|invalid[_\s-]?api[_\s-]?key|unauthori[sz]ed|forbidden|authentication|permission/i.test(
-    message
-  );
+  return isAiAuthenticationError(error);
 };
 
 export const reviewJobForUser = async (input: { jobId: string; userId: string }) => {

@@ -115,6 +115,10 @@ Manual enrichment uses the existing `url`, `source_quality`, and `status` fields
 - processed_at
 - hidden_at
 - triage_reason
+- prefilter_decision
+- job_likelihood_score
+- prefilter_json
+- last_processed_at
 - job_count
 - error_message
 - created_at
@@ -122,7 +126,11 @@ Manual enrichment uses the existing `url`, `source_quality`, and `status` fields
 
 `inbox_status` controls whether an imported email appears in the active import inbox. Supported MVP values are `active`, `processed`, `hidden`, `likely_irrelevant`, and `needs_check`. This is separate from `extraction_status`, because an email can be extracted but still need manual checking, or processed and no longer useful in the active inbox.
 
-`triage_reason` stores deterministic keyword classification or user triage notes. It is not an AI-review field.
+`triage_reason` stores deterministic keyword classification, prefilter reason, budget pause reason, or user triage notes. It is not an AI-review field.
+
+`prefilter_decision`, `job_likelihood_score`, and `prefilter_json` store deterministic pre-AI extraction metadata. The prefilter can classify an imported email as `ignore_low_signal`, `possible_job_source`, `likely_job_source`, `recruiter_message`, `needs_manual_check`, or `duplicate_source`. This metadata exists so obvious noise and duplicate sources can be skipped without spending AI extraction budget, while still leaving the user in control through manual extraction.
+
+`extraction_status` may include `ignored_low_signal`, `needs_manual_check`, `extraction_paused_budget`, and `duplicate_source` in addition to the earlier `not_started`, `succeeded`, and `failed` states.
 
 ## EmailAccount
 
@@ -213,8 +221,18 @@ Manual enrichment stores the pasted full job description in `full_text`. The cur
 
 ## In-process JobAlertProcessingSession
 
-Milestone 19 adds a backend-driven job-alert processing session, but the session is not a persisted Prisma model in the MVP.
+Milestone 20 keeps the backend-driven job-alert processing session in memory; it is not a persisted Prisma model in the MVP.
 
-The API process keeps one active in-memory session with progress fields such as import counts, extraction counts, created-job counts, review queue items, current review job, next review time, errors, and warnings. This lets the workflow continue if the browser tab closes, as long as the API server keeps running.
+The API process keeps one active in-memory session with import counts, current-batch email IDs, backlog scope, extraction/review budgets, extraction queue items, review queue items, current extraction/review IDs, next extraction/review times, AI budget statuses, errors, and warnings. This lets the workflow continue if the browser tab closes, as long as the API server keeps running.
+
+Default session behavior is current-batch only:
+
+- `includeBacklog` defaults to `false`.
+- `maxEmailsToProcess` defaults to `10`.
+- `maxExtractionsPerRun` defaults to `3`.
+- `maxReviewsPerRun` defaults to `3`.
+- `extractionDelaySeconds` and `reviewDelaySeconds` default to `60`.
+
+Extraction and review are separate budgeted queues. Provider rate limits pause the relevant queue and mark remaining items as paused for later retry instead of failing every remaining email or job.
 
 MVP limitation: the in-memory session does not survive API server restart. Historical AI/extraction work is still represented by persisted `AutomationRun`, `ImportedEmail`, `Job`, `JobDescription`, and `AiReview` rows.

@@ -17,6 +17,19 @@ export const getAiProviderMetadata = () => {
   };
 };
 
+const messageFromError = (error: unknown) =>
+  error instanceof Error ? error.message : String(error ?? "Unknown error");
+
+export const isAiRateLimitError = (error: unknown) =>
+  /status=429|http\s*429|too many requests|rate[_\s-]?limit|rate limited|tpm|tokens per minute/i.test(
+    messageFromError(error)
+  );
+
+export const isAiAuthenticationError = (error: unknown) =>
+  /status=(401|403)|http\s*(401|403)|invalid[_\s-]?api[_\s-]?key|unauthori[sz]ed|forbidden|authentication|permission/i.test(
+    messageFromError(error)
+  );
+
 const stringifyDetail = (detail: unknown) => {
   if (typeof detail === "string") {
     return detail;

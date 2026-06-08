@@ -67,14 +67,22 @@ type ImportPanelProps = {
   updateProcessingField: (field: keyof JobAlertProcessingFormState, value: string) => void;
 };
 
-type ImportInboxFilter = "active" | "needs_check" | "failed" | "processed" | "hidden" | "all";
+type ImportInboxFilter =
+  | "active"
+  | "needs_check"
+  | "paused_budget"
+  | "processed"
+  | "ignored"
+  | "hidden"
+  | "all";
 
 const importInboxFilters: { id: ImportInboxFilter; label: string }[] = [
   { id: "active", label: "Active" },
-  { id: "needs_check", label: "Needs check" },
-  { id: "failed", label: "Failed" },
+  { id: "needs_check", label: "Needs manual check" },
+  { id: "paused_budget", label: "Paused by budget" },
   { id: "processed", label: "Processed" },
-  { id: "hidden", label: "Hidden / irrelevant" },
+  { id: "ignored", label: "Ignored / low signal" },
+  { id: "hidden", label: "Hidden" },
   { id: "all", label: "All" }
 ];
 
@@ -86,11 +94,15 @@ const importedEmailPreview = (email: ImportedEmail) =>
 
 const importedEmailIsActive = (email: ImportedEmail) =>
   email.extractionStatus === "failed" ||
+  email.extractionStatus === "needs_manual_check" ||
+  email.extractionStatus === "extraction_paused_budget" ||
   email.inboxStatus === "active" ||
   email.inboxStatus === "needs_check";
 
-const importedEmailIsHidden = (email: ImportedEmail) =>
-  email.inboxStatus === "hidden" || email.inboxStatus === "likely_irrelevant";
+const importedEmailIsIgnored = (email: ImportedEmail) =>
+  email.inboxStatus === "likely_irrelevant" || email.extractionStatus === "ignored_low_signal";
+
+const importedEmailIsHidden = (email: ImportedEmail) => email.inboxStatus === "hidden";
 
 const importedEmailSourceUrl = (email: ImportedEmail) => {
   const text = [email.snippet, email.bodyText].filter(Boolean).join(" ");
@@ -120,7 +132,45 @@ const importedEmailActionLabel = (email: ImportedEmail) => {
 };
 
 const emailNeedsPrimaryAction = (email: ImportedEmail) =>
-  email.extractionStatus === "not_started" || email.extractionStatus === "failed";
+  email.extractionStatus === "not_started" ||
+  email.extractionStatus === "failed" ||
+  email.extractionStatus === "needs_manual_check" ||
+  email.extractionStatus === "extraction_paused_budget";
+
+const importedEmailAiUsageLabel = (email: ImportedEmail) =>
+  ["succeeded", "failed"].includes(email.extractionStatus) ? "AI used" : "AI not used";
+
+const importedEmailNextAction = (email: ImportedEmail) => {
+  if (email.extractionStatus === "extraction_paused_budget") {
+    return "Wait/retry or extract anyway";
+  }
+
+  if (email.extractionStatus === "needs_manual_check" || email.inboxStatus === "needs_check") {
+    return "Manual check";
+  }
+
+  if (email.extractionStatus === "ignored_low_signal") {
+    return "Hide or extract anyway";
+  }
+
+  if (email.extractionStatus === "duplicate_source") {
+    return "Restore only if needed";
+  }
+
+  if (email.extractionStatus === "succeeded" && email.jobCount > 0) {
+    return "Open extracted jobs";
+  }
+
+  if (email.extractionStatus === "succeeded") {
+    return "Keep hidden or re-run";
+  }
+
+  if (email.extractionStatus === "failed") {
+    return "Retry extraction";
+  }
+
+  return "Extract anyway";
+};
 
 const importedEmailDetailsLabel = (email: ImportedEmail, selected: boolean) => {
   if (selected) {
@@ -140,15 +190,19 @@ const matchesImportInboxFilter = (email: ImportedEmail, filter: ImportInboxFilte
   }
 
   if (filter === "needs_check") {
-    return email.inboxStatus === "needs_check";
+    return email.inboxStatus === "needs_check" || email.extractionStatus === "needs_manual_check";
   }
 
-  if (filter === "failed") {
-    return email.extractionStatus === "failed";
+  if (filter === "paused_budget") {
+    return email.extractionStatus === "extraction_paused_budget";
   }
 
   if (filter === "processed") {
     return email.inboxStatus === "processed";
+  }
+
+  if (filter === "ignored") {
+    return importedEmailIsIgnored(email);
   }
 
   if (filter === "hidden") {
@@ -252,9 +306,14 @@ export function ImportPanel({
   const inboxCounts = useMemo(
     () => ({
       active: importedEmails.filter(importedEmailIsActive).length,
-      needs_check: importedEmails.filter((email) => email.inboxStatus === "needs_check").length,
-      failed: importedEmails.filter((email) => email.extractionStatus === "failed").length,
+      needs_check: importedEmails.filter(
+        (email) => email.inboxStatus === "needs_check" || email.extractionStatus === "needs_manual_check"
+      ).length,
+      paused_budget: importedEmails.filter(
+        (email) => email.extractionStatus === "extraction_paused_budget"
+      ).length,
       processed: importedEmails.filter((email) => email.inboxStatus === "processed").length,
+      ignored: importedEmails.filter(importedEmailIsIgnored).length,
       hidden: importedEmails.filter(importedEmailIsHidden).length,
       all: importedEmails.length
     }),
@@ -309,7 +368,10 @@ export function ImportPanel({
   return (
     <section className="profile-panel">
       <div className="section-heading">
-        <h2>Imports</h2>
+        <div>
+          <h2>Imports</h2>
+          <p className="muted">Source history for Gmail and pasted job-alert inputs.</p>
+        </div>
         <button disabled={isBusy || !user} type="button" onClick={() => void onRefreshImportedEmails()}>
           Refresh imports
         </button>
@@ -578,8 +640,8 @@ export function ImportPanel({
         <section className="import-inbox-panel">
           <div className="section-heading">
             <div>
-              <h3>Imported email inbox</h3>
-              <p className="muted">Process imported job-alert emails into jobs.</p>
+              <h3>Source history</h3>
+              <p className="muted">Active and needs-check sources stay first; processed and ignored items are filters.</p>
             </div>
             <button
               className="button-primary"
@@ -654,6 +716,15 @@ export function ImportPanel({
                       <BadgeRow className="email-badges">
                         <ImportStatusBadge status={email.importStatus} />
                         <InboxStatusBadge status={email.inboxStatus} />
+                        <StatusBadge label={email.prefilterDecision ?? "No prefilter"} tone="info" />
+                        {email.jobLikelihoodScore !== null ? (
+                          <StatusBadge label={`Score ${email.jobLikelihoodScore}`} tone="neutral" />
+                        ) : null}
+                        <StatusBadge
+                          label={importedEmailAiUsageLabel(email)}
+                          tone={importedEmailAiUsageLabel(email) === "AI used" ? "accent" : "muted"}
+                        />
+                        <StatusBadge label={importedEmailNextAction(email)} tone="warning" />
                         {sourceLabel ? (
                           <StatusBadge label={sourceLabel} tone="muted" />
                         ) : null}
@@ -855,12 +926,45 @@ export function ImportPanel({
                     <BadgeRow>
                       <InboxStatusBadge status={selectedImportedEmail.inboxStatus} />
                       <ExtractionStatusBadge email={selectedImportedEmail} />
+                      <StatusBadge
+                        label={importedEmailAiUsageLabel(selectedImportedEmail)}
+                        tone={
+                          importedEmailAiUsageLabel(selectedImportedEmail) === "AI used"
+                            ? "accent"
+                            : "muted"
+                        }
+                      />
                     </BadgeRow>
                   </dd>
                 </div>
                 <div>
+                  <dt>Prefilter</dt>
+                  <dd>
+                    <BadgeRow>
+                      <StatusBadge
+                        label={selectedImportedEmail.prefilterDecision ?? "No prefilter"}
+                        tone="info"
+                      />
+                      {selectedImportedEmail.jobLikelihoodScore !== null ? (
+                        <StatusBadge
+                          label={`Score ${selectedImportedEmail.jobLikelihoodScore}`}
+                          tone="neutral"
+                        />
+                      ) : null}
+                    </BadgeRow>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Next action</dt>
+                  <dd>{importedEmailNextAction(selectedImportedEmail)}</dd>
+                </div>
+                <div>
                   <dt>Reason</dt>
-                  <dd>{selectedImportedEmail.triageReason ?? "No triage reason saved."}</dd>
+                  <dd>
+                    {selectedImportedEmail.prefilterJson?.reason ??
+                      selectedImportedEmail.triageReason ??
+                      "No triage reason saved."}
+                  </dd>
                 </div>
                 <div>
                   <dt>Extracted jobs</dt>
@@ -874,10 +978,10 @@ export function ImportPanel({
               </dl>
 
               {selectedImportedEmail.errorMessage ? (
-                <div className="description-block">
-                  <h4>Extraction Error</h4>
+                <details className="inline-disclosure">
+                  <summary>Technical extraction error</summary>
                   <p>{selectedImportedEmail.errorMessage}</p>
-                </div>
+                </details>
               ) : null}
 
               <div className="description-block">

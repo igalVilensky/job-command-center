@@ -18,7 +18,7 @@ import {
 } from "../lib/gmail-client";
 import { validateGmailRecentImport } from "../lib/gmail-validation";
 import { HttpError } from "../lib/http-error";
-import { classifyImportedEmail } from "../lib/imported-email-classification";
+import { classifyImportedEmail, prefilterImportedEmail } from "../lib/imported-email-classification";
 import { serializeImportedEmail } from "../lib/import-validation";
 import { prisma } from "../lib/prisma";
 import {
@@ -278,6 +278,7 @@ const createImportedEmailFromGmail = async (
   message: ReturnType<typeof gmailMessageToImportedEmail>
 ) => {
   const classification = classifyImportedEmail(message);
+  const prefilter = prefilterImportedEmail(message);
   const existing = await prisma.importedEmail.findUnique({
     where: {
       userId_provider_providerMessageId: {
@@ -316,6 +317,9 @@ const createImportedEmailFromGmail = async (
       snippet: message.snippet,
       bodyText: message.bodyText,
       triageReason: classification.reason,
+      prefilterDecision: prefilter.prefilterDecision,
+      jobLikelihoodScore: prefilter.jobLikelihoodScore,
+      prefilterJson: prefilter as Prisma.InputJsonValue,
       rawMetadataJson: message.rawMetadataJson as Prisma.InputJsonValue
     },
     include: {
@@ -443,6 +447,8 @@ export const importRecentGmailEmailsForUser = async (
 
   const { account, accessToken } = await gmailAccessToken(connectedAccount);
   const emails = [];
+  const importedEmailIds = [];
+  const duplicateEmailIds = [];
   let imported = 0;
   let duplicates = 0;
 
@@ -456,8 +462,10 @@ export const importRecentGmailEmailsForUser = async (
 
       if (result.duplicate) {
         duplicates += 1;
+        duplicateEmailIds.push(result.email.id);
       } else {
         imported += 1;
+        importedEmailIds.push(result.email.id);
       }
 
       emails.push(serializeImportedEmail(result.email));
@@ -485,6 +493,8 @@ export const importRecentGmailEmailsForUser = async (
     imported,
     duplicates,
     emails,
+    importedEmailIds,
+    duplicateEmailIds,
     query: input.query
   };
 };

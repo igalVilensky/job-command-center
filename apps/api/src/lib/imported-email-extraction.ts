@@ -1,9 +1,16 @@
 import { Prisma, type ImportedEmail } from "@prisma/client";
-import { callExtractJobs, EXTRACT_PROMPT_VERSION, getAiProviderMetadata } from "./ai-client";
+import {
+  callExtractJobs,
+  EXTRACT_PROMPT_VERSION,
+  getAiProviderMetadata,
+  isAiRateLimitError
+} from "./ai-client";
 import { type AiExtractedJob, validateExtractionResponse } from "./ai-validation";
 import {
   classifyImportedEmail,
-  type ImportedEmailClassificationResult
+  prefilterImportedEmail,
+  type ImportedEmailClassificationResult,
+  type ImportedEmailPrefilterResult
 } from "./imported-email-classification";
 import { HttpError } from "./http-error";
 import { prepareImportedEmailSource } from "./imported-email-source";
@@ -60,10 +67,40 @@ export const markImportExtractionFailed = async (id: string, message: string) =>
         inboxStatus: "active",
         processedAt: null,
         hiddenAt: null,
+        lastProcessedAt: new Date(),
         errorMessage: message
       }
     })
     .catch(() => undefined);
+};
+
+export const markImportExtractionPausedBudget = async (id: string, message: string) => {
+  await prisma.importedEmail
+    .update({
+      where: { id },
+      data: {
+        extractionStatus: "extraction_paused_budget",
+        inboxStatus: "active",
+        processedAt: null,
+        hiddenAt: null,
+        lastProcessedAt: new Date(),
+        triageReason: message,
+        errorMessage: message
+      }
+    })
+    .catch(() => undefined);
+};
+
+export const importedEmailHasEnoughExtractionText = (
+  email: Pick<ImportedEmail, "subject" | "snippet" | "bodyText">
+) => {
+  const compact = [email.subject, email.snippet, email.bodyText]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return compact.length >= 80 || Boolean(email.bodyText?.trim() && email.bodyText.trim().length >= 50);
 };
 
 export type ExtractImportedEmailResult = {
@@ -77,6 +114,7 @@ export type ExtractImportedEmailResult = {
   createdCount: number;
   skippedDuplicates: number;
   classification: ImportedEmailClassificationResult;
+  prefilter: ImportedEmailPrefilterResult;
   skippedByClassification: boolean;
   automationRun: {
     id: string;
@@ -88,6 +126,7 @@ export const extractImportedEmailForUser = async (input: {
   importedEmailId: string;
   userId: string;
   skipLikelyIrrelevant?: boolean;
+  skipIneligiblePrefilter?: boolean;
 }): Promise<ExtractImportedEmailResult> => {
   const importedEmail = await prisma.importedEmail.findFirst({
     where: {
@@ -101,14 +140,22 @@ export const extractImportedEmailForUser = async (input: {
   }
 
   const classification = classifyImportedEmail(importedEmail);
+  const prefilter = prefilterImportedEmail(importedEmail);
+  const shouldSkipIneligible = input.skipLikelyIrrelevant || input.skipIneligiblePrefilter;
 
-  if (input.skipLikelyIrrelevant && classification.classification === "likely_irrelevant") {
+  if (shouldSkipIneligible && !prefilter.aiExtractionEligible) {
     const email = await prisma.importedEmail.update({
       where: { id: importedEmail.id },
       data: {
         inboxStatus: "likely_irrelevant",
+        extractionStatus: "ignored_low_signal",
         hiddenAt: new Date(),
-        triageReason: classification.reason
+        lastProcessedAt: new Date(),
+        triageReason: prefilter.reason,
+        prefilterDecision: prefilter.prefilterDecision,
+        jobLikelihoodScore: prefilter.jobLikelihoodScore,
+        prefilterJson: prefilter as Prisma.InputJsonValue,
+        errorMessage: null
       },
       include: {
         _count: {
@@ -126,6 +173,45 @@ export const extractImportedEmailForUser = async (input: {
       createdCount: 0,
       skippedDuplicates: 0,
       classification,
+      prefilter,
+      skippedByClassification: true,
+      automationRun: null
+    };
+  }
+
+  if (shouldSkipIneligible && !importedEmailHasEnoughExtractionText(importedEmail)) {
+    const message = "Needs manual check before AI extraction because the saved source text is too short.";
+    const email = await prisma.importedEmail.update({
+      where: { id: importedEmail.id },
+      data: {
+        inboxStatus: "needs_check",
+        extractionStatus: "needs_manual_check",
+        processedAt: null,
+        hiddenAt: null,
+        lastProcessedAt: new Date(),
+        triageReason: message,
+        prefilterDecision: "needs_manual_check",
+        jobLikelihoodScore: prefilter.jobLikelihoodScore,
+        prefilterJson: prefilter as Prisma.InputJsonValue,
+        errorMessage: null
+      },
+      include: {
+        _count: {
+          select: {
+            jobs: true
+          }
+        }
+      }
+    });
+
+    return {
+      jobs: [],
+      email,
+      warnings: [],
+      createdCount: 0,
+      skippedDuplicates: 0,
+      classification,
+      prefilter,
       skippedByClassification: true,
       automationRun: null
     };
@@ -151,7 +237,8 @@ export const extractImportedEmailForUser = async (input: {
     subject: importedEmail.subject,
     snippet: importedEmail.snippet,
     classification: classification.classification,
-    triageReason: classification.reason,
+    prefilter,
+    triageReason: prefilter.reason,
     sourceType,
     sourceName,
     originalLength: preparedSource.originalLength,
@@ -176,7 +263,11 @@ export const extractImportedEmailForUser = async (input: {
     await prisma.importedEmail.update({
       where: { id: importedEmail.id },
       data: {
-        triageReason: classification.reason
+        triageReason: prefilter.reason,
+        prefilterDecision: prefilter.prefilterDecision,
+        jobLikelihoodScore: prefilter.jobLikelihoodScore,
+        prefilterJson: prefilter as Prisma.InputJsonValue,
+        lastProcessedAt: new Date()
       }
     });
 
@@ -296,7 +387,11 @@ export const extractImportedEmailForUser = async (input: {
           inboxStatus: nextInboxStatus,
           processedAt: jobCount > 0 ? now : null,
           hiddenAt: nextInboxStatus === "likely_irrelevant" ? now : null,
-          triageReason: classification.reason,
+          lastProcessedAt: now,
+          triageReason: prefilter.reason,
+          prefilterDecision: prefilter.prefilterDecision,
+          jobLikelihoodScore: prefilter.jobLikelihoodScore,
+          prefilterJson: prefilter as Prisma.InputJsonValue,
           jobCount,
           errorMessage: null
         },
@@ -337,6 +432,7 @@ export const extractImportedEmailForUser = async (input: {
       ...result,
       warnings: extraction.warnings,
       classification,
+      prefilter,
       skippedByClassification: false,
       automationRun: {
         id: run.id,
@@ -345,7 +441,15 @@ export const extractImportedEmailForUser = async (input: {
     };
   } catch (error) {
     const message = errorMessage(error);
-    await Promise.all([markRunFailed(run.id, message), markImportExtractionFailed(importedEmail.id, message)]);
+    await Promise.all([
+      markRunFailed(run.id, message),
+      isAiRateLimitError(error)
+        ? markImportExtractionPausedBudget(
+            importedEmail.id,
+            "AI extraction paused because provider rate limit was reached. Try again later or reduce max AI calls."
+          )
+        : markImportExtractionFailed(importedEmail.id, message)
+    ]);
     throw error;
   }
 };

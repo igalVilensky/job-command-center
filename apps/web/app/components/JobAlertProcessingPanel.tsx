@@ -7,7 +7,7 @@ import {
   type User,
   formatDate
 } from "./types";
-import { BadgeRow, StatusBadge } from "./StatusBadge";
+import { BadgeRow, StatusBadge, type BadgeTone } from "./StatusBadge";
 
 type JobAlertProcessingPanelProps = {
   form: JobAlertProcessingFormState;
@@ -22,7 +22,7 @@ type JobAlertProcessingPanelProps = {
   updateField: (field: keyof JobAlertProcessingFormState, value: string) => void;
 };
 
-const statusTone = (status: JobAlertProcessingSession["status"]) => {
+const statusTone = (status: JobAlertProcessingSession["status"]): BadgeTone => {
   if (status === "running") {
     return "accent";
   }
@@ -31,15 +31,43 @@ const statusTone = (status: JobAlertProcessingSession["status"]) => {
     return "success";
   }
 
-  if (status === "failed") {
-    return "danger";
-  }
-
-  if (status === "cancelled") {
+  if (status === "completed_with_paused_items" || status === "cancelled") {
     return "warning";
   }
 
+  if (status === "failed" || status === "completed_with_errors") {
+    return "danger";
+  }
+
   return "muted";
+};
+
+const budgetTone = (status: JobAlertProcessingSession["extractionBudgetStatus"]): BadgeTone => {
+  if (status === "running") {
+    return "accent";
+  }
+
+  if (status === "paused_rate_limit" || status === "exhausted_for_run") {
+    return "warning";
+  }
+
+  return "success";
+};
+
+const budgetLabel = (status: JobAlertProcessingSession["extractionBudgetStatus"]) => {
+  if (status === "paused_rate_limit") {
+    return "Paused by rate limit";
+  }
+
+  if (status === "exhausted_for_run") {
+    return "Exhausted for this run";
+  }
+
+  if (status === "running") {
+    return "Running";
+  }
+
+  return "Available";
 };
 
 const formatSeconds = (seconds: number) => {
@@ -59,6 +87,11 @@ const formatSeconds = (seconds: number) => {
 
 const metric = (label: string, value: string | number) => ({ label, value });
 
+const statusCount = (
+  items: { status: string }[] | undefined,
+  statuses: string[]
+) => items?.filter((item) => statuses.includes(item.status)).length ?? 0;
+
 export function JobAlertProcessingPanel({
   form,
   isBusy,
@@ -73,49 +106,66 @@ export function JobAlertProcessingPanel({
 }: JobAlertProcessingPanelProps) {
   const [now, setNow] = useState(Date.now());
   const status = session?.status ?? "idle";
+  const isRunning = status === "running";
+  const nextExtractionSeconds = session?.nextExtractionAt
+    ? Math.max(0, Math.ceil((new Date(session.nextExtractionAt).getTime() - now) / 1000))
+    : null;
   const nextReviewSeconds = session?.nextReviewAt
     ? Math.max(0, Math.ceil((new Date(session.nextReviewAt).getTime() - now) / 1000))
     : null;
+  const currentExtraction = session?.extractionQueue.find(
+    (item) => item.importedEmailId === session.currentExtractionEmailId
+  );
   const currentReview = session?.reviewQueue.find(
     (item) => item.jobId === session.currentReviewJobId
   );
-  const remainingReviews =
-    session?.reviewQueue.filter((item) => item.status === "queued" || item.status === "running")
-      .length ?? 0;
-  const estimatedRemainingSeconds =
-    session && remainingReviews > 1 ? (remainingReviews - 1) * session.reviewDelaySeconds : 0;
+  const extractionQueued = statusCount(session?.extractionQueue, ["queued", "running"]);
+  const reviewQueued = statusCount(session?.reviewQueue, ["queued", "running"]);
+  const extractionPaused = statusCount(session?.extractionQueue, ["paused"]);
+  const reviewPaused = statusCount(session?.reviewQueue, ["paused"]);
   const metrics = useMemo(
     () => [
       metric("Imported", session?.importedCount ?? 0),
       metric("Duplicates", session?.duplicateCount ?? 0),
-      metric("Emails", `${session?.extractedEmailsCount ?? 0}/${session?.emailsToExtractCount ?? 0}`),
-      metric("Failed emails", session?.failedEmailsCount ?? 0),
+      metric("Considered", session?.emailsConsideredCount ?? 0),
+      metric(
+        "Emails capped",
+        `${session?.emailsToExtractCount ?? 0}/${session?.maxEmailsToProcess ?? form.maxEmailsToProcess}`
+      ),
+      metric(
+        "AI extractions",
+        `${session?.extractedEmailsCount ?? 0}/${session?.maxExtractionsPerRun ?? form.maxExtractionsPerRun}`
+      ),
+      metric("Skipped prefilter", session?.emailsSkippedPrefilterCount ?? 0),
+      metric("Paused emails", session?.emailsPausedByBudgetCount ?? 0),
       metric("Jobs created", session?.jobsCreatedCount ?? 0),
-      metric("Ready for review", session?.jobsReadyForReviewCount ?? 0),
-      metric("Need description", session?.jobsNeedingFullDescriptionCount ?? 0),
-      metric("Reviewed", `${session?.reviewsCompletedCount ?? 0}/${session?.reviewQueue.length ?? 0}`),
-      metric("Review failures", session?.reviewsFailedCount ?? 0)
+      metric(
+        "AI reviews",
+        `${session?.reviewsCompletedCount ?? 0}/${session?.maxReviewsPerRun ?? form.maxReviewsPerRun}`
+      ),
+      metric("Paused reviews", reviewPaused)
     ],
-    [session]
+    [form.maxEmailsToProcess, form.maxExtractionsPerRun, form.maxReviewsPerRun, reviewPaused, session]
   );
 
   useEffect(() => {
-    if (!session?.nextReviewAt || status !== "running") {
+    if ((!session?.nextExtractionAt && !session?.nextReviewAt) || status !== "running") {
       return undefined;
     }
 
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
 
     return () => window.clearInterval(interval);
-  }, [session?.nextReviewAt, status]);
+  }, [session?.nextExtractionAt, session?.nextReviewAt, status]);
 
   return (
-    <section className="processing-panel" aria-label="Job alert processing">
+    <section className="processing-panel" aria-label="Budget-aware job alert processing">
       <div className="section-heading">
         <div>
-          <h3>Job Alert Processing</h3>
+          <h3>Sync and Triage</h3>
           <p className="muted">
-            Imports emails, extracts jobs, and reviews eligible full-description jobs one by one.
+            Import the current Gmail batch, prefilter obvious noise, then spend AI calls only inside
+            the run budget.
           </p>
         </div>
         <BadgeRow>
@@ -123,54 +173,134 @@ export function JobAlertProcessingPanel({
         </BadgeRow>
       </div>
 
-      {status === "idle" ? (
-        <form className="job-form processing-form" onSubmit={onStart}>
-          <div className="form-grid">
-            <label>
-              Gmail query
-              <input
-                value={form.gmailQuery}
-                onChange={(event) => updateField("gmailQuery", event.target.value)}
-              />
-            </label>
+      <form className="job-form processing-form" onSubmit={onStart}>
+        <div className="form-grid">
+          <label className="wide">
+            Gmail query
+            <input
+              disabled={isRunning}
+              value={form.gmailQuery}
+              onChange={(event) => updateField("gmailQuery", event.target.value)}
+            />
+          </label>
 
-            <label>
-              Max results
-              <input
-                value={form.maxResults}
-                inputMode="numeric"
-                onChange={(event) => updateField("maxResults", event.target.value)}
-              />
-            </label>
+          <label>
+            Max results
+            <input
+              disabled={isRunning}
+              value={form.maxResults}
+              inputMode="numeric"
+              onChange={(event) => updateField("maxResults", event.target.value)}
+            />
+          </label>
 
-            <label>
-              Review delay seconds
-              <input
-                value={form.reviewDelaySeconds}
-                inputMode="numeric"
-                onChange={(event) => updateField("reviewDelaySeconds", event.target.value)}
-              />
-            </label>
-          </div>
+          <label>
+            Max emails to process
+            <input
+              disabled={isRunning}
+              value={form.maxEmailsToProcess}
+              inputMode="numeric"
+              onChange={(event) => updateField("maxEmailsToProcess", event.target.value)}
+            />
+          </label>
 
-          <div className="button-row">
-            <button className="button-primary" disabled={isBusy || !user} type="submit">
-              Start job-alert session
+          <label>
+            Max AI extractions
+            <input
+              disabled={isRunning}
+              value={form.maxExtractionsPerRun}
+              inputMode="numeric"
+              onChange={(event) => updateField("maxExtractionsPerRun", event.target.value)}
+            />
+          </label>
+
+          <label>
+            Max AI reviews
+            <input
+              disabled={isRunning}
+              value={form.maxReviewsPerRun}
+              inputMode="numeric"
+              onChange={(event) => updateField("maxReviewsPerRun", event.target.value)}
+            />
+          </label>
+
+          <label>
+            Extraction delay seconds
+            <input
+              disabled={isRunning}
+              value={form.extractionDelaySeconds}
+              inputMode="numeric"
+              onChange={(event) => updateField("extractionDelaySeconds", event.target.value)}
+            />
+          </label>
+
+          <label>
+            Review delay seconds
+            <input
+              disabled={isRunning}
+              value={form.reviewDelaySeconds}
+              inputMode="numeric"
+              onChange={(event) => updateField("reviewDelaySeconds", event.target.value)}
+            />
+          </label>
+
+          <label className="processing-toggle wide">
+            <input
+              checked={form.includeBacklog === "true"}
+              disabled={isRunning}
+              type="checkbox"
+              onChange={(event) =>
+                updateField("includeBacklog", event.target.checked ? "true" : "false")
+              }
+            />
+            Include active backlog
+          </label>
+        </div>
+
+        <div className="button-row">
+          <button className="button-primary" disabled={isBusy || !user || isRunning} type="submit">
+            Sync and triage
+          </button>
+          <button disabled={isBusy || !user} type="button" onClick={() => void onRefresh()}>
+            Refresh session
+          </button>
+          {isRunning ? (
+            <button
+              className="button-danger"
+              disabled={isBusy || !user}
+              type="button"
+              onClick={onCancel}
+            >
+              Cancel session
             </button>
-            <button disabled={isBusy || !user} type="button" onClick={() => void onRefresh()}>
-              Refresh session
-            </button>
-          </div>
-        </form>
-      ) : (
+          ) : null}
+        </div>
+      </form>
+
+      {session && status !== "idle" ? (
         <>
           <div className="processing-status-grid">
             <div className="processing-step">
               <span className="eyebrow">Current step</span>
-              <strong>{session?.currentStep ?? "Idle"}</strong>
+              <strong>{session.currentStep}</strong>
               <small>
-                Started {formatDate(session?.startedAt ?? null)}
-                {session?.completedAt ? ` · Finished ${formatDate(session.completedAt)}` : ""}
+                Started {formatDate(session.startedAt)}
+                {session.completedAt ? ` · Finished ${formatDate(session.completedAt)}` : ""}
+              </small>
+            </div>
+
+            <div className="processing-step">
+              <span className="eyebrow">AI extraction</span>
+              <strong>
+                {currentExtraction
+                  ? currentExtraction.subject
+                  : nextExtractionSeconds !== null
+                    ? `Next extraction in ${formatSeconds(nextExtractionSeconds)}`
+                    : `${extractionQueued} queued · ${extractionPaused} paused`}
+              </strong>
+              <small>
+                Delay {session.extractionDelaySeconds}s ·{" "}
+                {budgetLabel(session.extractionBudgetStatus)}
               </small>
             </div>
 
@@ -181,16 +311,28 @@ export function JobAlertProcessingPanel({
                   ? `${currentReview.title} at ${currentReview.company}`
                   : nextReviewSeconds !== null
                     ? `Next review in ${formatSeconds(nextReviewSeconds)}`
-                    : "No review running"}
+                    : `${reviewQueued} queued · ${reviewPaused} paused`}
               </strong>
               <small>
-                Delay {session?.reviewDelaySeconds ?? 60}s
-                {estimatedRemainingSeconds > 0
-                  ? ` · about ${formatSeconds(estimatedRemainingSeconds)} queued wait`
-                  : ""}
+                Delay {session.reviewDelaySeconds}s · {budgetLabel(session.reviewBudgetStatus)}
               </small>
             </div>
           </div>
+
+          <BadgeRow label="AI budget status">
+            <StatusBadge
+              label={`Extraction ${budgetLabel(session.extractionBudgetStatus)}`}
+              tone={budgetTone(session.extractionBudgetStatus)}
+            />
+            <StatusBadge
+              label={`Review ${budgetLabel(session.reviewBudgetStatus)}`}
+              tone={budgetTone(session.reviewBudgetStatus)}
+            />
+            <StatusBadge
+              label={session.includeBacklog ? "Backlog included" : "Current batch only"}
+              tone={session.includeBacklog ? "warning" : "success"}
+            />
+          </BadgeRow>
 
           <dl className="processing-metrics">
             {metrics.map((item) => (
@@ -201,62 +343,65 @@ export function JobAlertProcessingPanel({
             ))}
           </dl>
 
-          {session?.errors.length ? (
-            <div className="processing-message message-danger">
-              <h4>Errors</h4>
+          {session.warnings.length ? (
+            <div className="processing-message message-warning">
+              <h4>Session summary</h4>
               <ul className="compact-list">
-                {session.errors.slice(0, 5).map((error) => (
-                  <li key={error}>{error}</li>
+                {session.warnings.slice(0, 3).map((warning) => (
+                  <li key={warning}>{warning}</li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {session?.warnings.length ? (
+          {session.errors.length ? (
             <details className="inline-disclosure">
-              <summary>Warnings</summary>
+              <summary>Technical errors ({session.errors.length})</summary>
               <ul className="compact-list">
-                {session.warnings.slice(0, 8).map((warning) => (
-                  <li key={warning}>{warning}</li>
+                {session.errors.map((error) => (
+                  <li key={error}>{error}</li>
                 ))}
               </ul>
             </details>
           ) : null}
 
+          <details className="inline-disclosure">
+            <summary>
+              Extraction queue ({session.extractionQueue.length})
+            </summary>
+            <ul className="compact-list">
+              {session.extractionQueue.slice(0, 12).map((item) => (
+                <li key={item.importedEmailId}>
+                  {item.subject}: {item.status.replace(/_/g, " ")} · {item.prefilterDecision}
+                </li>
+              ))}
+            </ul>
+          </details>
+
+          <details className="inline-disclosure">
+            <summary>Review queue ({session.reviewQueue.length})</summary>
+            <ul className="compact-list">
+              {session.reviewQueue.slice(0, 12).map((item) => (
+                <li key={item.jobId}>
+                  {item.title} at {item.company}: {item.status.replace(/_/g, " ")}
+                </li>
+              ))}
+            </ul>
+          </details>
+
           <div className="button-row">
-            {status === "running" ? (
-              <>
-                <button disabled={isBusy || !user} type="button" onClick={() => void onRefresh()}>
-                  Refresh session
-                </button>
-                <button
-                  className="button-danger"
-                  disabled={isBusy || !user}
-                  type="button"
-                  onClick={onCancel}
-                >
-                  Cancel session
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" onClick={() => onOpenJobsFilter("all")}>
-                  Go to jobs ready for triage
-                </button>
-                <button type="button" onClick={() => onOpenJobsFilter("needs_description")}>
-                  Go to jobs needing full description
-                </button>
-                <button type="button" onClick={onOpenImports}>
-                  View import history
-                </button>
-                <button disabled={isBusy || !user} type="button" onClick={() => void onRefresh()}>
-                  Refresh session
-                </button>
-              </>
-            )}
+            <button type="button" onClick={() => onOpenJobsFilter("ready_for_review")}>
+              Review ready jobs
+            </button>
+            <button type="button" onClick={() => onOpenJobsFilter("needs_description")}>
+              Add full descriptions
+            </button>
+            <button type="button" onClick={onOpenImports}>
+              View import history
+            </button>
           </div>
         </>
-      )}
+      ) : null}
     </section>
   );
 }

@@ -596,10 +596,54 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
     setStatus("");
 
     const maxResults = Number(processingForm.maxResults);
+    const maxEmailsToProcess = Number(processingForm.maxEmailsToProcess);
+    const maxExtractionsPerRun = Number(processingForm.maxExtractionsPerRun);
+    const maxReviewsPerRun = Number(processingForm.maxReviewsPerRun);
+    const extractionDelaySeconds = Number(processingForm.extractionDelaySeconds);
     const reviewDelaySeconds = Number(processingForm.reviewDelaySeconds);
 
     if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 25) {
       setError("Max results must be an integer between 1 and 25");
+      setIsBusy(false);
+      return;
+    }
+
+    if (
+      !Number.isInteger(maxEmailsToProcess) ||
+      maxEmailsToProcess < 1 ||
+      maxEmailsToProcess > 100
+    ) {
+      setError("Max emails to process must be an integer between 1 and 100");
+      setIsBusy(false);
+      return;
+    }
+
+    if (
+      !Number.isInteger(maxExtractionsPerRun) ||
+      maxExtractionsPerRun < 0 ||
+      maxExtractionsPerRun > 25
+    ) {
+      setError("Max extractions must be an integer between 0 and 25");
+      setIsBusy(false);
+      return;
+    }
+
+    if (
+      !Number.isInteger(maxReviewsPerRun) ||
+      maxReviewsPerRun < 0 ||
+      maxReviewsPerRun > 25
+    ) {
+      setError("Max reviews must be an integer between 0 and 25");
+      setIsBusy(false);
+      return;
+    }
+
+    if (
+      !Number.isInteger(extractionDelaySeconds) ||
+      extractionDelaySeconds < 0 ||
+      extractionDelaySeconds > 3600
+    ) {
+      setError("Extraction delay seconds must be an integer between 0 and 3600");
       setIsBusy(false);
       return;
     }
@@ -622,6 +666,11 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           body: JSON.stringify({
             gmailQuery: processingForm.gmailQuery || null,
             maxResults,
+            maxEmailsToProcess,
+            includeBacklog: processingForm.includeBacklog === "true",
+            maxExtractionsPerRun,
+            maxReviewsPerRun,
+            extractionDelaySeconds,
             reviewDelaySeconds
           })
         }
@@ -1105,7 +1154,9 @@ export function ProfileSettings({ apiUrl }: { apiUrl: string }) {
           jobs={jobs}
           onCancelProcessingSession={() => void handleCancelProcessingSession()}
           onOpenImports={() => navigateToView("imports")}
+          onOpenJob={openJob}
           onOpenJobsFilter={openJobsWithFilter}
+          onOpenProfile={() => navigateToView("profile")}
           onRefreshProcessingSession={() => void handleRefreshProcessingSession()}
           onStartProcessingSession={handleStartProcessingSession}
           processingForm={processingForm}

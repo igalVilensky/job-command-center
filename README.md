@@ -1,8 +1,8 @@
 # Job Command Center
 
-Job Command Center is an open-source, self-hosted AI job search automation dashboard.
+Job Command Center is an open-source, self-hosted, budget-aware command center for job search decisions.
 
-It helps job seekers collect job opportunities from multiple sources, extract structured job data, analyze fit against an editable candidate profile, and track applications through a human-in-the-loop pipeline.
+It reduces job-search chaos by triaging job emails, identifying realistic opportunities, and telling the user the next useful action without auto-applying or wasting limited AI budget.
 
 The project is designed as both a practical personal job search tool and a portfolio project demonstrating AI automation, agentic workflows, API integrations, and safe human-in-the-loop product design.
 
@@ -19,6 +19,9 @@ It is not intended to be a hosted SaaS where the maintainer pays for other peopl
 - No automatic job applications.
 - Human approval is required before applying or contacting employers.
 - AI output is advisory, not authoritative.
+- Rule-based triage should run before AI whenever it can reduce noise safely.
+- AI extraction and AI review both consume scarce budget and must be capped.
+- Email is an input source; opportunities, jobs, and next actions are the main work objects.
 - Failed AI analysis must never destroy or block saved job data.
 - The app should be useful even when AI is disabled.
 
@@ -34,7 +37,8 @@ It is not intended to be a hosted SaaS where the maintainer pays for other peopl
 8. Groq provider.
 9. Automation run logs.
 10. Optional manual Gmail import and clear docs for later Google Sheets, n8n, Make, and Ollama connectors.
-11. Backend-driven job-alert processing session with sequential AI review delay for provider limits.
+11. Budget-aware job-alert processing session with deterministic prefiltering, capped AI extraction, capped AI review, and separate delays.
+12. Command Queue as the main signed-in view, grouped by next action rather than raw data type.
 
 ## Tech stack
 
@@ -63,15 +67,17 @@ docs/
 
 ## Current skeleton
 
-The current repository state includes the initial runnable skeleton, database/auth foundation, candidate profile settings, a manual job inbox, mock AI extraction/review foundation, an optional Groq provider adapter, simulated email imports, manual Gmail OAuth import, and an in-process job-alert processing session:
+The current repository state includes the runnable skeleton, database/auth foundation, candidate profile settings, manual job inbox, mock AI extraction/review foundation, optional Groq provider adapter, simulated email imports, manual Gmail OAuth import, and a budget-aware in-process job-alert processing session:
 
-- `apps/web`: Next.js + TypeScript app on port 3000 with minimal authenticated candidate profile, paste import, Gmail/imports, job inbox, and AI review views.
+- `apps/web`: Next.js + TypeScript app on port 3000 with a Command Queue, candidate profile, paste import, Gmail/imports source history, job queue, job detail, AI review, and pipeline views.
 - `apps/api`: Express + TypeScript API on port 4000 with `GET /health`, basic email/password auth, authenticated profile/job/import/Gmail/processing routes, and authenticated AI orchestration routes.
 - `apps/ai-service`: FastAPI service on port 8001 with `GET /health`, `POST /extract-jobs`, `POST /review-job`, mock provider behavior by default, and opt-in Groq provider behavior.
 - `docker-compose.yml`: local PostgreSQL service.
 - `apps/api/prisma`: Prisma schema and migrations for `User`, `CandidateProfile`, `JobSource`, `Job`, `JobDescription`, `ImportedEmail`, `EmailAccount`, `AiReview`, and `AutomationRun`.
 
 The job-alert processing session is stored in memory inside the API process. It continues if the browser tab closes, but it does not survive API server restart in the MVP.
+
+By default, a processing session only processes the current Gmail query result batch. It does not load every old active imported email unless `includeBacklog` is explicitly set to `true`.
 
 Gemini/Ollama/OpenAI providers, scheduled Gmail polling, scraping, browser extension, calendar, n8n, Make, and other external integrations are not implemented yet.
 
@@ -239,7 +245,7 @@ Job-alert processing session checks:
 ```bash
 curl -i -b /tmp/jobcc-cookies.txt \
   -H "Content-Type: application/json" \
-  -d '{"gmailQuery":"label:jobAlerts newer_than:30d","maxResults":10,"reviewDelaySeconds":5}' \
+  -d '{"gmailQuery":"label:jobAlerts newer_than:30d","maxResults":5,"maxEmailsToProcess":3,"includeBacklog":false,"maxExtractionsPerRun":2,"maxReviewsPerRun":1,"extractionDelaySeconds":5,"reviewDelaySeconds":5}' \
   http://127.0.0.1:4000/processing/job-alert-session/start
 
 curl -i -b /tmp/jobcc-cookies.txt \
@@ -249,7 +255,18 @@ curl -i -b /tmp/jobcc-cookies.txt \
   -X POST http://127.0.0.1:4000/processing/job-alert-session/cancel
 ```
 
-The processing session imports Gmail job alerts, extracts active imported emails, moves processed/hidden/likely irrelevant emails out of the active import inbox, and reviews eligible full-description jobs one by one with the configured delay.
+The processing session imports Gmail job alerts, deterministically prefilters the current batch, skips obvious low-signal and duplicate sources without AI, extracts only eligible emails within the extraction budget, and reviews eligible full-description jobs within the review budget. Extraction and review are both sequential and delayed. Provider rate limits pause the relevant queue instead of failing every remaining item.
+
+Browser smoke test for the command-center loop:
+
+1. Sign in as `demo@jobcc.local`.
+2. Open `Command Queue`.
+3. Start `Sync and triage` with max results `5`, max emails `3`, max AI extractions `2`, max AI reviews `1`, extraction delay `5`, review delay `5`, and backlog unchecked.
+4. Confirm the session says current batch only and does not process old backlog items.
+5. Confirm extraction and review have separate queue/budget status.
+6. Open `Imports` and check Active, Needs manual check, Paused by budget, Processed, Ignored / low signal, Hidden, and All filters.
+7. Confirm ignored or duplicate sources show a reason and can still be restored or extracted manually.
+8. Confirm Command Queue groups jobs and sources by next action.
 
 Profile checks:
 

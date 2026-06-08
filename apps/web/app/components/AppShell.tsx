@@ -23,7 +23,7 @@ type AppShellProps = {
 };
 
 const navItems: { view: ActiveView; label: string }[] = [
-  { view: "dashboard", label: "Dashboard" },
+  { view: "dashboard", label: "Command Queue" },
   { view: "jobs", label: "Jobs" },
   { view: "imports", label: "Imports" },
   { view: "profile", label: "Profile" },
@@ -48,7 +48,7 @@ export function AppShell({
       <main className="page-shell signed-out-shell" data-api-url={apiUrl}>
         <header className="signed-out-header">
           <div className="brand-block">
-            <p className="eyebrow">Milestone 15</p>
+              <p className="eyebrow">Milestone 20</p>
             <h1>Job Command Center</h1>
             <p className="api-pill">API: {apiUrl}</p>
           </div>
@@ -108,7 +108,7 @@ export function AppShell({
     <main className="page-shell signed-in-shell" data-api-url={apiUrl}>
       <aside className="app-sidebar" aria-label="Primary">
         <div className="sidebar-brand">
-          <p className="eyebrow">Milestone 15</p>
+          <p className="eyebrow">Milestone 20</p>
           <strong>JCC</strong>
         </div>
 

@@ -15,7 +15,15 @@ const simulateFields = new Set([
 ]);
 
 const importStatuses = new Set(["imported"]);
-const extractionStatuses = new Set(["not_started", "succeeded", "failed"]);
+const extractionStatuses = new Set([
+  "not_started",
+  "succeeded",
+  "failed",
+  "ignored_low_signal",
+  "needs_manual_check",
+  "extraction_paused_budget",
+  "duplicate_source"
+]);
 const inboxStatuses = new Set([
   "active",
   "processed",
@@ -29,7 +37,9 @@ const importEmailScopes = new Set([
   "processed",
   "hidden",
   "irrelevant",
+  "ignored",
   "needs_check",
+  "paused_budget",
   "failed",
   "all"
 ]);
@@ -48,7 +58,9 @@ export type ImportedEmailScope =
   | "processed"
   | "hidden"
   | "irrelevant"
+  | "ignored"
   | "needs_check"
+  | "paused_budget"
   | "failed"
   | "all";
 
@@ -254,6 +266,7 @@ export const serializeImportedEmail = (email: ImportedEmailWithCount) => {
     receivedAt: email.receivedAt?.toISOString() ?? null,
     processedAt: email.processedAt?.toISOString() ?? null,
     hiddenAt: email.hiddenAt?.toISOString() ?? null,
+    lastProcessedAt: email.lastProcessedAt?.toISOString() ?? null,
     createdAt: email.createdAt.toISOString(),
     updatedAt: email.updatedAt.toISOString(),
     jobCount: _count?.jobs ?? email.jobCount

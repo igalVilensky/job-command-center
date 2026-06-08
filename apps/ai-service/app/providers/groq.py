@@ -207,6 +207,12 @@ def _string_array(value: Any, label: str) -> list[str]:
     return [item.strip() for item in value if item.strip()]
 
 
+def _optional_string_array(value: Any, label: str) -> list[str]:
+    if value is None:
+        return []
+    return _string_array(value, label)
+
+
 def _enum(value: Any, label: str, allowed: set[str]) -> str:
     item = _string(value, label)
     if item not in allowed:
@@ -304,7 +310,7 @@ def _normalize_extraction(payload: dict[str, Any]) -> dict[str, object]:
     if not isinstance(jobs_value, list):
         raise ProviderError("extraction.jobs must be an array", 502)
 
-    warnings = _string_array(_required(payload, "warnings", "extraction"), "extraction.warnings")
+    warnings = _optional_string_array(payload.get("warnings"), "extraction.warnings")
     jobs = []
     for index, raw_job in enumerate(jobs_value):
         label = f"extraction.jobs[{index}]"
@@ -735,7 +741,8 @@ class GroqProvider:
         response_body = response.text
         if response.status_code >= 400:
             detail = _extract_api_error(response_body)
-            raise ProviderError(f"Groq API returned HTTP {response.status_code}: {detail}", 502)
+            status_code = response.status_code if response.status_code in {401, 403, 429} else 502
+            raise ProviderError(f"Groq API returned HTTP {response.status_code}: {detail}", status_code)
 
         try:
             parsed = json.loads(response_body)

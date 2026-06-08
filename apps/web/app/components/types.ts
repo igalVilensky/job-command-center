@@ -123,6 +123,19 @@ export type ImportedEmail = {
   processedAt: string | null;
   hiddenAt: string | null;
   triageReason: string | null;
+  prefilterDecision: string | null;
+  jobLikelihoodScore: number | null;
+  prefilterJson: {
+    jobLikelihoodScore?: number;
+    prefilterDecision?: string;
+    stackHits?: string[];
+    blockerHits?: string[];
+    positiveSignals?: string[];
+    negativeSignals?: string[];
+    reason?: string;
+    aiExtractionEligible?: boolean;
+  } | null;
+  lastProcessedAt: string | null;
   jobCount: number;
   errorMessage: string | null;
   createdAt: string;
@@ -141,6 +154,8 @@ export type GmailImportResult = {
   imported: number;
   duplicates: number;
   emails: ImportedEmail[];
+  importedEmailIds?: string[];
+  duplicateEmailIds?: string[];
   query: string;
 };
 
@@ -212,31 +227,64 @@ export type GmailImportFormState = {
 
 export type JobAlertReviewQueueItem = {
   jobId: string;
-  status: "queued" | "running" | "completed" | "failed" | "skipped";
+  status: "queued" | "running" | "completed" | "failed" | "skipped" | "paused";
   company: string;
   title: string;
+  errorMessage: string | null;
+};
+
+export type JobAlertExtractionQueueItem = {
+  importedEmailId: string;
+  status: "queued" | "running" | "completed" | "failed" | "skipped" | "paused";
+  subject: string;
+  from: string | null;
+  prefilterDecision: string;
+  jobLikelihoodScore: number;
+  reason: string;
   errorMessage: string | null;
 };
 
 export type JobAlertProcessingSession = {
   id: string;
   userId: string;
-  status: "idle" | "running" | "completed" | "failed" | "cancelled";
+  status:
+    | "idle"
+    | "running"
+    | "completed"
+    | "completed_with_errors"
+    | "completed_with_paused_items"
+    | "failed"
+    | "cancelled";
   startedAt: string | null;
   completedAt: string | null;
   currentStep: string;
   importedCount: number;
   duplicateCount: number;
+  importedBatchEmailIds: string[];
+  includeBacklog: boolean;
+  maxEmailsToProcess: number;
+  maxExtractionsPerRun: number;
+  maxReviewsPerRun: number;
+  emailsConsideredCount: number;
   emailsToExtractCount: number;
+  emailsSkippedPrefilterCount: number;
+  emailsPausedByBudgetCount: number;
   extractedEmailsCount: number;
   failedEmailsCount: number;
+  duplicateSourceCount: number;
   jobsCreatedCount: number;
   jobsReadyForReviewCount: number;
   jobsNeedingFullDescriptionCount: number;
   jobsLikelyIrrelevantCount: number;
+  extractionQueue: JobAlertExtractionQueueItem[];
   reviewQueue: JobAlertReviewQueueItem[];
+  extractionDelaySeconds: number;
   reviewDelaySeconds: number;
+  extractionBudgetStatus: "available" | "running" | "paused_rate_limit" | "exhausted_for_run";
+  reviewBudgetStatus: "available" | "running" | "paused_rate_limit" | "exhausted_for_run";
+  currentExtractionEmailId: string | null;
   currentReviewJobId: string | null;
+  nextExtractionAt: string | null;
   nextReviewAt: string | null;
   reviewsCompletedCount: number;
   reviewsFailedCount: number;
@@ -248,6 +296,11 @@ export type JobAlertProcessingSession = {
 export type JobAlertProcessingFormState = {
   gmailQuery: string;
   maxResults: string;
+  maxEmailsToProcess: string;
+  includeBacklog: string;
+  maxExtractionsPerRun: string;
+  maxReviewsPerRun: string;
+  extractionDelaySeconds: string;
   reviewDelaySeconds: string;
 };
 
@@ -419,6 +472,11 @@ export const defaultGmailImportForm: GmailImportFormState = {
 export const defaultJobAlertProcessingForm: JobAlertProcessingFormState = {
   gmailQuery: "label:jobAlerts newer_than:30d",
   maxResults: "10",
+  maxEmailsToProcess: "10",
+  includeBacklog: "false",
+  maxExtractionsPerRun: "3",
+  maxReviewsPerRun: "3",
+  extractionDelaySeconds: "60",
   reviewDelaySeconds: "60"
 };
 
@@ -576,6 +634,22 @@ export const extractedJobsStatus = (email: ImportedEmail) => {
     return "Failed";
   }
 
+  if (email.extractionStatus === "ignored_low_signal") {
+    return "Ignored low signal";
+  }
+
+  if (email.extractionStatus === "needs_manual_check") {
+    return "Needs manual check";
+  }
+
+  if (email.extractionStatus === "extraction_paused_budget") {
+    return "Paused by AI budget";
+  }
+
+  if (email.extractionStatus === "duplicate_source") {
+    return "Duplicate source";
+  }
+
   if (email.extractionStatus === "not_started") {
     return "Not extracted yet";
   }
@@ -596,6 +670,22 @@ export const selectedEmailJobCountText = (email: ImportedEmail) => {
     return "Failed";
   }
 
+  if (email.extractionStatus === "ignored_low_signal") {
+    return "Ignored low signal";
+  }
+
+  if (email.extractionStatus === "needs_manual_check") {
+    return "Needs manual check";
+  }
+
+  if (email.extractionStatus === "extraction_paused_budget") {
+    return "Paused by AI budget";
+  }
+
+  if (email.extractionStatus === "duplicate_source") {
+    return "Duplicate source";
+  }
+
   return String(email.jobCount);
 };
 
@@ -614,6 +704,22 @@ export const selectedEmailEmptyJobsMessage = (email: ImportedEmail) => {
 
   if (email.extractionStatus === "failed") {
     return `Extraction failed${email.errorMessage ? `: ${email.errorMessage}` : "."}`;
+  }
+
+  if (email.extractionStatus === "ignored_low_signal") {
+    return "Skipped by deterministic prefilter. Use Extract anyway if this should be reconsidered.";
+  }
+
+  if (email.extractionStatus === "needs_manual_check") {
+    return "Needs a manual look before spending AI extraction budget.";
+  }
+
+  if (email.extractionStatus === "extraction_paused_budget") {
+    return "AI extraction was paused for budget or provider-limit safety.";
+  }
+
+  if (email.extractionStatus === "duplicate_source") {
+    return "Skipped because this source was already imported.";
   }
 
   return "No jobs extracted from this email in this session.";

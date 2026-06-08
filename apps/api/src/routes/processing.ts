@@ -11,7 +11,16 @@ import { type AuthenticatedRequest, requireAuth } from "../middleware/auth";
 
 export const processingRouter = Router();
 
-const startFields = new Set(["gmailQuery", "maxResults", "reviewDelaySeconds"]);
+const startFields = new Set([
+  "gmailQuery",
+  "maxResults",
+  "maxEmailsToProcess",
+  "includeBacklog",
+  "maxExtractionsPerRun",
+  "maxReviewsPerRun",
+  "extractionDelaySeconds",
+  "reviewDelaySeconds"
+]);
 
 const getUserId = (req: AuthenticatedRequest) => {
   if (!req.user) {
@@ -29,6 +38,11 @@ const validateStartBody = (body: unknown) => {
     return {
       gmailQuery: DEFAULT_GMAIL_QUERY,
       maxResults: DEFAULT_GMAIL_MAX_RESULTS,
+      maxEmailsToProcess: 10,
+      includeBacklog: false,
+      maxExtractionsPerRun: 3,
+      maxReviewsPerRun: 3,
+      extractionDelaySeconds: 60,
       reviewDelaySeconds: 60
     };
   }
@@ -47,6 +61,26 @@ const validateStartBody = (body: unknown) => {
       ? body.gmailQuery.trim()
       : DEFAULT_GMAIL_QUERY;
   const maxResults = body.maxResults === undefined || body.maxResults === null ? DEFAULT_GMAIL_MAX_RESULTS : body.maxResults;
+  const maxEmailsToProcess =
+    body.maxEmailsToProcess === undefined || body.maxEmailsToProcess === null
+      ? 10
+      : body.maxEmailsToProcess;
+  const includeBacklog =
+    body.includeBacklog === undefined || body.includeBacklog === null
+      ? false
+      : body.includeBacklog;
+  const maxExtractionsPerRun =
+    body.maxExtractionsPerRun === undefined || body.maxExtractionsPerRun === null
+      ? 3
+      : body.maxExtractionsPerRun;
+  const maxReviewsPerRun =
+    body.maxReviewsPerRun === undefined || body.maxReviewsPerRun === null
+      ? 3
+      : body.maxReviewsPerRun;
+  const extractionDelaySeconds =
+    body.extractionDelaySeconds === undefined || body.extractionDelaySeconds === null
+      ? 60
+      : body.extractionDelaySeconds;
   const reviewDelaySeconds =
     body.reviewDelaySeconds === undefined || body.reviewDelaySeconds === null
       ? 60
@@ -58,6 +92,42 @@ const validateStartBody = (body: unknown) => {
 
   if (maxResults < 1 || maxResults > MAX_GMAIL_RESULTS) {
     throw new HttpError(400, `maxResults must be between 1 and ${MAX_GMAIL_RESULTS}`);
+  }
+
+  if (typeof maxEmailsToProcess !== "number" || !Number.isInteger(maxEmailsToProcess)) {
+    throw new HttpError(400, "maxEmailsToProcess must be an integer");
+  }
+
+  if (maxEmailsToProcess < 1 || maxEmailsToProcess > 100) {
+    throw new HttpError(400, "maxEmailsToProcess must be between 1 and 100");
+  }
+
+  if (typeof includeBacklog !== "boolean") {
+    throw new HttpError(400, "includeBacklog must be a boolean");
+  }
+
+  if (typeof maxExtractionsPerRun !== "number" || !Number.isInteger(maxExtractionsPerRun)) {
+    throw new HttpError(400, "maxExtractionsPerRun must be an integer");
+  }
+
+  if (maxExtractionsPerRun < 0 || maxExtractionsPerRun > 25) {
+    throw new HttpError(400, "maxExtractionsPerRun must be between 0 and 25");
+  }
+
+  if (typeof maxReviewsPerRun !== "number" || !Number.isInteger(maxReviewsPerRun)) {
+    throw new HttpError(400, "maxReviewsPerRun must be an integer");
+  }
+
+  if (maxReviewsPerRun < 0 || maxReviewsPerRun > 25) {
+    throw new HttpError(400, "maxReviewsPerRun must be between 0 and 25");
+  }
+
+  if (typeof extractionDelaySeconds !== "number" || !Number.isInteger(extractionDelaySeconds)) {
+    throw new HttpError(400, "extractionDelaySeconds must be an integer");
+  }
+
+  if (extractionDelaySeconds < 0 || extractionDelaySeconds > 3600) {
+    throw new HttpError(400, "extractionDelaySeconds must be between 0 and 3600");
   }
 
   if (typeof reviewDelaySeconds !== "number" || !Number.isInteger(reviewDelaySeconds)) {
@@ -75,6 +145,11 @@ const validateStartBody = (body: unknown) => {
   return {
     gmailQuery,
     maxResults,
+    maxEmailsToProcess,
+    includeBacklog,
+    maxExtractionsPerRun,
+    maxReviewsPerRun,
+    extractionDelaySeconds,
     reviewDelaySeconds
   };
 };

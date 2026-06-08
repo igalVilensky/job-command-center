@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { classifyImportedEmail } from "../lib/imported-email-classification";
+import { classifyImportedEmail, prefilterImportedEmail } from "../lib/imported-email-classification";
 import { extractImportedEmailForUser, rawMetadataJsonData } from "../lib/imported-email-extraction";
 import {
   type ImportedEmailScope,
@@ -47,19 +47,23 @@ const importScopeWhere = (scope: ImportedEmailScope) => {
   }
 
   if (scope === "hidden") {
+    return { inboxStatus: "hidden" };
+  }
+
+  if (scope === "irrelevant" || scope === "ignored") {
     return {
-      inboxStatus: {
-        in: ["hidden", "likely_irrelevant"]
-      }
+      OR: [{ inboxStatus: "likely_irrelevant" }, { extractionStatus: "ignored_low_signal" }]
     };
   }
 
-  if (scope === "irrelevant") {
-    return { inboxStatus: "likely_irrelevant" };
+  if (scope === "needs_check") {
+    return {
+      OR: [{ inboxStatus: "needs_check" }, { extractionStatus: "needs_manual_check" }]
+    };
   }
 
-  if (scope === "needs_check") {
-    return { inboxStatus: "needs_check" };
+  if (scope === "paused_budget") {
+    return { extractionStatus: "extraction_paused_budget" };
   }
 
   if (scope === "failed") {
@@ -74,7 +78,9 @@ const importScopeWhere = (scope: ImportedEmailScope) => {
         }
       },
       {
-        extractionStatus: "failed"
+        extractionStatus: {
+          in: ["failed", "needs_manual_check", "extraction_paused_budget"]
+        }
       }
     ]
   };
@@ -148,6 +154,7 @@ importsRouter.post(
     const userId = getUserId(req as AuthenticatedRequest);
     const input = validateImportedEmailSimulate(req.body);
     const classification = classifyImportedEmail(input);
+    const prefilter = prefilterImportedEmail(input);
     const existing = await prisma.importedEmail.findUnique({
       where: {
         userId_provider_providerMessageId: {
@@ -187,6 +194,9 @@ importsRouter.post(
         snippet: input.snippet,
         bodyText: input.bodyText,
         triageReason: classification.reason,
+        prefilterDecision: prefilter.prefilterDecision,
+        jobLikelihoodScore: prefilter.jobLikelihoodScore,
+        prefilterJson: rawMetadataJsonData(prefilter),
         ...(input.rawMetadataJson !== undefined
           ? { rawMetadataJson: rawMetadataJsonData(input.rawMetadataJson) }
           : {})

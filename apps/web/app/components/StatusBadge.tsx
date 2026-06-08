@@ -201,6 +201,10 @@ export const extractionStatusBadgeSpec = (
     {
       not_started: { label: "Not extracted yet", tone: "neutral" },
       failed: { label: "Failed", tone: "danger" },
+      ignored_low_signal: { label: "Ignored low signal", tone: "muted" },
+      needs_manual_check: { label: "Needs manual check", tone: "warning" },
+      extraction_paused_budget: { label: "Paused by AI budget", tone: "warning" },
+      duplicate_source: { label: "Duplicate source", tone: "muted" },
       processing: { label: "Extracting", tone: "info" },
       running: { label: "Extracting", tone: "info" },
       processed: { label: "Processed", tone: "success" },

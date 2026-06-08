@@ -162,6 +162,10 @@ model ImportedEmail {
   processedAt       DateTime?
   hiddenAt          DateTime?
   triageReason      String?  @db.Text
+  prefilterDecision String?
+  jobLikelihoodScore Int?
+  prefilterJson     Json?
+  lastProcessedAt   DateTime?
   jobCount          Int      @default(0)
   errorMessage      String?  @db.Text
   jobs              Job[]
@@ -173,6 +177,7 @@ model ImportedEmail {
   @@index([userId, importStatus])
   @@index([userId, extractionStatus])
   @@index([userId, inboxStatus])
+  @@index([userId, prefilterDecision])
 }
 
 model EmailAccount {
