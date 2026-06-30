@@ -56,7 +56,7 @@ def get_provider_config() -> ProviderConfig:
         groq_api_key=groq_api_key.strip() if groq_api_key and groq_api_key.strip() else None,
         groq_model=groq_model.strip()
         if groq_model and groq_model.strip()
-        else "llama-3.3-70b-versatile",
+        else "openai/gpt-oss-120b",
         groq_api_url=os.getenv(
             "GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions"
         ),
@@ -64,7 +64,7 @@ def get_provider_config() -> ProviderConfig:
         review_max_description_chars=_env_int("AI_REVIEW_MAX_DESCRIPTION_CHARS", 4500),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
+        ollama_model=os.getenv("OLLAMA_MODEL", "openai/gpt-oss-120b"),
         has_groq_api_key=bool(groq_api_key and groq_api_key.strip()),
         has_groq_model=bool(groq_model and groq_model.strip()),
         has_gemini_api_key=bool(os.getenv("GEMINI_API_KEY")),
